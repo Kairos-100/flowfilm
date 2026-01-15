@@ -1,0 +1,136 @@
+.project-page {
+  width: 100%;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: 32px;
+  transition: color 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 400;
+}
+
+.back-button:hover {
+  color: var(--text-primary);
+}
+
+.project-header {
+  margin-bottom: 48px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border-golden);
+  position: relative;
+}
+
+.project-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 80px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.project-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 0;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.project-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 8px 0 0 0;
+  font-weight: 400;
+}
+
+.project-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-golden);
+  margin-bottom: 48px;
+  overflow-x: auto;
+}
+
+.tab-button {
+  padding: 12px 24px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 400;
+}
+
+.tab-button:hover {
+  color: var(--accent);
+  background-color: var(--bg-tertiary);
+  border-radius: 6px 6px 0 0;
+}
+
+.tab-button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+@keyframes slideIn {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.project-content {
+  min-height: 400px;
+}
+
+.project-not-found {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.project-not-found h2 {
+  font-size: 24px;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.project-not-found a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.access-denied {
+  text-align: center;
+  padding: 60px 20px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.access-denied h3 {
+  font-size: 24px;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.access-denied p {
+  font-size: 16px;
+  color: var(--text-secondary);
+}

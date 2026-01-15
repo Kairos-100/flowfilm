@@ -1,0 +1,239 @@
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-secondary);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+
+.login-container {
+  background-color: var(--bg-primary);
+  padding: 60px 40px;
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid var(--border-golden);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px var(--shadow-lg);
+  position: relative;
+  z-index: 1;
+  transition: border-color 0.2s;
+}
+
+.login-header {
+  text-align: left;
+  margin-bottom: 48px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.login-header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-group input {
+  padding: 10px 0;
+  border: none;
+  border-bottom: 2px solid var(--border-golden);
+  border-radius: 0;
+  font-size: 15px;
+  color: var(--text-primary);
+  background-color: transparent;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.form-group input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.error-message {
+  padding: 12px;
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 14px;
+  text-align: center;
+}
+
+.login-button {
+  padding: 12px 0;
+  background-color: var(--accent);
+  color: var(--bg-primary);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+  margin-top: 24px;
+  width: 100%;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.login-button:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-info {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+  text-align: left;
+}
+
+.info-title {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-list li {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
+.info-note {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 8px;
+  padding: 8px;
+}
+
+.success-message {
+  color: #0f7b0f;
+  background-color: #d4edda;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #c3e6cb;
+  font-weight: 500;
+}
+
+.info-note a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.info-note a:hover {
+  text-decoration: underline;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 24px 0;
+  color: var(--text-secondary);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.login-divider span {
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.register-link {
+  text-decoration: none;
+  display: block;
+  width: 100%;
+}
+
+.register-button {
+  width: 100%;
+  padding: 12px 24px;
+  background-color: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+}
+
+.register-button:hover {
+  background-color: var(--accent);
+  color: white;
+}
+
+.register-button-secondary {
+  width: 100%;
+  padding: 12px 24px;
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.register-button-secondary:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
