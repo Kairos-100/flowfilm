@@ -389,9 +389,13 @@ export default function Calendar() {
       const calendars = await listCalendars(accessToken);
       console.log(`[Calendar] Found ${calendars.length} calendars`);
       
-      // Filtrar solo calendarios visibles/seleccionados
-      const visibleCalendars = calendars.filter((cal: any) => cal.selected !== false);
-      console.log(`[Calendar] Loading events from ${visibleCalendars.length} visible calendars`);
+      // Filtrar calendarios: incluir todos los calendarios excepto los de solo lectura
+      // Esto incluye "Mis calendarios" y "Otros calendarios" que tienen acceso de escritura
+      const visibleCalendars = calendars.filter((cal: any) => {
+        // Incluir todos los calendarios excepto los que son de solo lectura
+        return cal.accessRole !== 'freeBusyReader' && cal.accessRole !== 'reader';
+      });
+      console.log(`[Calendar] Loading events from ${visibleCalendars.length} calendars (all accessible calendars)`);
       
       // Cargar eventos de todos los calendarios visibles
       const allEventsPromises = visibleCalendars.map(async (calendar: any) => {
@@ -703,25 +707,34 @@ export default function Calendar() {
       if (accessToken) {
         try {
           const googleEventId = event.id.replace('google_', '');
-          // Buscar el evento original para obtener el calendarId
-          const originalEvent = googleEvents.find(e => e.id === googleEventId);
-          const calendarId = (originalEvent as any)?.calendarId || 'primary';
+          // Usar calendarId del evento procesado si está disponible
+          const calendarId = (event as any).calendarId || (event as any).originalEvent?.calendarId || 'primary';
           
           console.log('[Calendar] Deleting event with ID:', googleEventId, 'from calendar:', calendarId);
+          console.log('[Calendar] Event details:', {
+            id: event.id,
+            title: event.title,
+            calendarId: calendarId,
+            originalEvent: (event as any).originalEvent
+          });
           
           // Eliminar de Google Calendar primero
           await deleteCalendarEvent(accessToken, googleEventId, calendarId);
           
           // Luego eliminar de la lista local
-          setGoogleEvents(prev => prev.filter(e => e.id !== googleEventId));
+          setGoogleEvents(prev => prev.filter(e => {
+            // El ID en googleEvents es el ID original sin el prefijo 'google_'
+            return e.id !== googleEventId;
+          }));
           
-          console.log('[Calendar] Event deleted successfully');
+          console.log('[Calendar] Event deleted successfully from Google Calendar');
         } catch (error) {
           console.error('[Calendar] Error deleting Google Calendar event:', error);
           const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+          console.error('[Calendar] Full error details:', error);
           alert(`Error al eliminar evento: ${errorMessage}\n\nVerifica la consola (F12) para más detalles.`);
           // Recargar para restaurar el evento
-          loadGoogleEvents();
+          await loadGoogleEvents();
         }
       }
     } else {
@@ -755,6 +768,8 @@ export default function Calendar() {
         type: 'otro' as const,
         projectId: undefined,
         originalEvent: event, // Guardar referencia al evento original
+        calendarId: (event as any).calendarId || 'primary', // Agregar calendarId
+        calendarName: (event as any).calendarName || 'Primary', // Agregar calendarName
       };
     });
   }, [googleEvents]);
