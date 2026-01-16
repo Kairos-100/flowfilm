@@ -186,6 +186,7 @@ export default function DocumentsTab({
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [uploadCategory, setUploadCategory] = useState<DocumentCategory>('other');
+  const [categoryUpdateTrigger, setCategoryUpdateTrigger] = useState(0);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
   // Cerrar dropdown cuando se hace click fuera
@@ -324,6 +325,7 @@ export default function DocumentsTab({
       enabledFolders,
       selectedFiles: selectedDriveFiles,
     };
+    // Guardar inmediatamente
     localStorage.setItem(
       getUserStorageKey(`projectDriveConfig_${projectId}`, user.id),
       JSON.stringify(config)
@@ -333,7 +335,7 @@ export default function DocumentsTab({
       await loadAllDriveFiles();
     }
     loadDriveFiles();
-  }, [user?.id, projectId, enabledFolders, selectedDriveFiles]);
+  }, [user?.id, projectId, enabledFolders, selectedDriveFiles, loadAllDriveFiles, loadDriveFiles]);
 
   const handleSaveFolderConfig = useCallback(() => {
     saveDriveConfig(() => setShowFolderConfig(false));
@@ -425,7 +427,7 @@ export default function DocumentsTab({
     });
     
     return [...documentItems, ...scriptItems, ...driveItems];
-  }, [documents, scripts, driveFiles, categories, getSavedCategory]);
+  }, [documents, scripts, driveFiles, categories, getSavedCategory, categoryUpdateTrigger]);
 
   // Filtrar por categoría seleccionada (optimizado con useMemo)
   const filteredItems = useMemo(() => {
@@ -537,7 +539,8 @@ export default function DocumentsTab({
   // Función para cambiar la categoría de un documento existente
   const handleChangeCategory = useCallback((fileId: string, newCategory: DocumentCategory) => {
     saveCategory(fileId, newCategory);
-    // No es necesario recargar, useMemo actualizará automáticamente
+    // Forzar actualización del useMemo
+    setCategoryUpdateTrigger(prev => prev + 1);
   }, [saveCategory]);
 
   if (loading) {

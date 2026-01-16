@@ -7,7 +7,7 @@ import { useCalendarEvents } from '../contexts/CalendarEventsContext';
 import { useProjects } from '../contexts/ProjectsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserStorageKey } from '../utils/storage';
-import { listCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, CalendarEvent as GoogleCalendarEvent } from '../services/googleCalendar';
+import { listCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, listCalendars, CalendarEvent as GoogleCalendarEvent } from '../services/googleCalendar';
 import { CalendarEvent } from '../types';
 import './Calendar.css';
 
@@ -367,6 +367,7 @@ export default function Calendar() {
 
   // Función optimizada para cargar eventos de Google Calendar (silenciosa)
   // Carga eventos del mes actual más una semana antes y después para mejor sincronización
+  // Carga eventos de TODOS los calendarios visibles, no solo PRIMARY
   const loadGoogleEvents = useCallback(async () => {
     if (!accessToken) {
       console.warn('[Calendar] No access token available');
@@ -384,27 +385,52 @@ export default function Calendar() {
       
       console.log('[Calendar] Fetching events from:', timeMin, 'to', timeMax);
       
-      const events = await listCalendarEvents(accessToken, timeMin, timeMax);
+      // Primero, obtener lista de calendarios
+      const calendars = await listCalendars(accessToken);
+      console.log(`[Calendar] Found ${calendars.length} calendars`);
       
-      console.log(`[Calendar] Loaded ${events.length} events from Google Calendar`);
-      console.log('[Calendar] All events:', events);
+      // Filtrar solo calendarios visibles/seleccionados
+      const visibleCalendars = calendars.filter((cal: any) => cal.selected !== false);
+      console.log(`[Calendar] Loading events from ${visibleCalendars.length} visible calendars`);
       
-      if (events.length > 0) {
-        console.log('[Calendar] Sample events:', events.slice(0, 5).map((e: GoogleCalendarEvent) => ({
+      // Cargar eventos de todos los calendarios visibles
+      const allEventsPromises = visibleCalendars.map(async (calendar: any) => {
+        try {
+          const events = await listCalendarEvents(accessToken, timeMin, timeMax, calendar.id);
+          // Agregar información del calendario a cada evento
+          return events.map((event: any) => ({
+            ...event,
+            calendarId: calendar.id,
+            calendarName: calendar.summary || calendar.id,
+            calendarColor: calendar.backgroundColor || '#2383e2',
+          }));
+        } catch (error) {
+          console.error(`[Calendar] Error loading events from ${calendar.summary}:`, error);
+          return [];
+        }
+      });
+      
+      const allEventsArrays = await Promise.all(allEventsPromises);
+      const allEvents = allEventsArrays.flat();
+      
+      console.log(`[Calendar] Loaded ${allEvents.length} total events from all calendars`);
+      
+      if (allEvents.length > 0) {
+        console.log('[Calendar] Sample events:', allEvents.slice(0, 5).map((e: any) => ({
           id: e.id,
           summary: e.summary,
+          calendar: e.calendarName,
           start: e.start?.dateTime || e.start?.date,
-          end: e.end?.dateTime || e.end?.date,
         })));
       } else {
         console.warn('[Calendar] No events found. Check:');
-        console.warn('1. Are events created in the PRIMARY calendar?');
+        console.warn('1. Are events created in visible calendars?');
         console.warn('2. Are events within the date range?');
         console.warn('3. Is the access token valid?');
         console.warn('4. Date range:', timeMin, 'to', timeMax);
       }
       
-      setGoogleEvents(events);
+      setGoogleEvents(allEvents);
     } catch (error) {
       console.error('[Calendar] Error loading Google Calendar events:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
@@ -677,20 +703,25 @@ export default function Calendar() {
       if (accessToken) {
         try {
           const googleEventId = event.id.replace('google_', '');
+          // Buscar el evento original para obtener el calendarId
+          const originalEvent = googleEvents.find(e => e.id === googleEventId);
+          const calendarId = (originalEvent as any)?.calendarId || 'primary';
           
-          // Eliminar inmediatamente de la lista local para mejor UX
+          console.log('[Calendar] Deleting event with ID:', googleEventId, 'from calendar:', calendarId);
+          
+          // Eliminar de Google Calendar primero
+          await deleteCalendarEvent(accessToken, googleEventId, calendarId);
+          
+          // Luego eliminar de la lista local
           setGoogleEvents(prev => prev.filter(e => e.id !== googleEventId));
           
-          // Luego eliminar de Google Calendar
-          await deleteCalendarEvent(accessToken, googleEventId);
-          
-          // NO recargar inmediatamente - ya lo eliminamos de la lista
-          // La sincronización automática se encargará de mantener todo actualizado
+          console.log('[Calendar] Event deleted successfully');
         } catch (error) {
           console.error('[Calendar] Error deleting Google Calendar event:', error);
-          // Si falla, recargar para restaurar el evento
+          const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+          alert(`Error al eliminar evento: ${errorMessage}\n\nVerifica la consola (F12) para más detalles.`);
+          // Recargar para restaurar el evento
           loadGoogleEvents();
-          alert('Failed to delete Google Calendar event');
         }
       }
     } else {
