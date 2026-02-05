@@ -92,7 +92,6 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
   const [languages, setLanguages] = useState<string[]>([]);
   const [isLanguagesOpen, setIsLanguagesOpen] = useState(false);
   const [customLanguageInput, setCustomLanguageInput] = useState('');
-  const [showCustomLanguageInput, setShowCustomLanguageInput] = useState(false);
   const [address, setAddress] = useState('');
   const [website, setWebsite] = useState('');
   const [notes, setNotes] = useState('');
@@ -293,7 +292,6 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     if (customLang && !languages.includes(customLang)) {
       setLanguages(prev => [...prev, customLang]);
       setCustomLanguageInput('');
-      setShowCustomLanguageInput(false);
     }
   };
 
@@ -453,7 +451,6 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     setNameSuggestions([]);
     setShowNameSuggestions(false);
     setCustomLanguageInput('');
-    setShowCustomLanguageInput(false);
     setInviteLink(null);
     setLinkCopied(false);
   };
