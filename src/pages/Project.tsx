@@ -185,7 +185,7 @@ export default function Project() {
     const isVisitor = user?.role === 'visitor' || inviteVisitor !== null;
     
     if (!isVisitor) {
-      return { isVisitor: false, allowedTabs: [], visitor: null };
+      return { isVisitor: false, allowedTabs: [] as TabType[], visitor: null };
     }
 
     const visitor = user?.role === 'visitor'
@@ -197,7 +197,7 @@ export default function Project() {
           }
         : null;
 
-    const allowedTabs = inviteVisitor?.allowedTabs || visitor?.allowedTabs || [];
+    const allowedTabs: TabType[] = inviteVisitor?.allowedTabs || visitor?.allowedTabs || [];
     
     return { isVisitor, allowedTabs, visitor };
   }, [user, inviteVisitor, projectVisitors]);
