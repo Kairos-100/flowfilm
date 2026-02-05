@@ -1,5 +1,5 @@
 import { useParams, useSearchParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CollaboratorsTab from '../components/project/CollaboratorsTab';
@@ -10,6 +10,37 @@ import { TabType } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useProjects } from '../contexts/ProjectsContext';
 import './Project.css';
+
+// Constantes
+const ALL_TABS: { id: TabType; label: string }[] = [
+  { id: 'colaboradores', label: 'Collaborators' },
+  { id: 'tareas', label: 'Tasks' },
+  { id: 'documentos', label: 'Documents' },
+  { id: 'budget', label: 'Budget' },
+];
+
+const VALID_TABS: TabType[] = ['colaboradores', 'budget', 'documentos', 'tareas'];
+
+// Función auxiliar para limpiar parámetros de URL
+const cleanUrlParams = (searchParams: URLSearchParams) => {
+  const newSearchParams = new URLSearchParams(searchParams);
+  newSearchParams.delete('invite');
+  newSearchParams.delete('email');
+  const queryString = newSearchParams.toString();
+  window.history.replaceState({}, '', `${window.location.pathname}${queryString ? '?' + queryString : ''}`);
+};
+
+// Función auxiliar para crear proyecto temporal
+const createTemporaryProject = (id: string) => ({
+  id,
+  title: 'Shared Project',
+  description: 'You have been invited to view this project',
+  status: 'pre-produccion' as const,
+  category: 'originals' as const,
+  subcategory: 'feature-film' as const,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
 
 export default function Project() {
   const { id } = useParams<{ id: string }>();
@@ -22,7 +53,6 @@ export default function Project() {
     budgets,
     scripts,
     documents,
-    // Removed unused directors variable
     visitors,
     tasks,
     addCollaborator,
@@ -38,77 +68,47 @@ export default function Project() {
     removeTask,
   } = useProjects();
 
-  const projectVisitors = visitors[id!] || [];
+  const projectVisitors = useMemo(() => visitors[id!] || [], [visitors, id]);
   const [inviteVisitor, setInviteVisitor] = useState<{ allowedTabs: TabType[]; email: string } | null>(null);
   const [isLoadingInvite, setIsLoadingInvite] = useState(false);
+
+  // Función auxiliar para procesar invitación desde sessionStorage
+  const processInviteFromStorage = useCallback((inviteToken: string, inviteEmail: string, projectId: string) => {
+    const inviteDataKey = `invite_data_${inviteToken}`;
+    const storedInviteData = sessionStorage.getItem(inviteDataKey);
+    
+    if (storedInviteData) {
+      try {
+        const inviteData = JSON.parse(storedInviteData);
+        const emailMatch = inviteData.email?.toLowerCase() === decodeURIComponent(inviteEmail).toLowerCase();
+        
+        if (inviteData.allowedTabs && inviteData.projectId === projectId && emailMatch) {
+          setInviteVisitor({
+            allowedTabs: inviteData.allowedTabs,
+            email: inviteData.email,
+          });
+          cleanUrlParams(searchParams);
+          return true;
+        }
+      } catch (e) {
+        console.error('Error parsing invite data from sessionStorage:', e);
+      }
+    }
+    return false;
+  }, [searchParams]);
 
   // Manejar parámetros de invitación en la URL
   useEffect(() => {
     const inviteToken = searchParams.get('invite');
     const inviteEmail = searchParams.get('email');
 
-    if (inviteToken && inviteEmail && id) {
-      setIsLoadingInvite(true);
-      
-      // Primero buscar en sessionStorage con clave invite_data_${inviteToken}
-      const inviteDataKey = `invite_data_${inviteToken}`;
-      const storedInviteData = sessionStorage.getItem(inviteDataKey);
-      
-      if (storedInviteData) {
-        try {
-          const inviteData = JSON.parse(storedInviteData);
-          if (inviteData.allowedTabs && inviteData.projectId === id && inviteData.email.toLowerCase() === decodeURIComponent(inviteEmail).toLowerCase()) {
-            setInviteVisitor({
-              allowedTabs: inviteData.allowedTabs,
-              email: inviteData.email,
-            });
-            
-            // Limpiar parámetros de la URL
-            const newSearchParams = new URLSearchParams(searchParams);
-            newSearchParams.delete('invite');
-            newSearchParams.delete('email');
-            window.history.replaceState({}, '', `${window.location.pathname}${newSearchParams.toString() ? '?' + newSearchParams.toString() : ''}`);
-            setIsLoadingInvite(false);
-            return;
-          }
-        } catch (e) {
-          console.error('Error parsing invite data from sessionStorage:', e);
-        }
-      }
-      
-      // Fallback: buscar el visitante en los visitantes del proyecto
-      const foundVisitor = projectVisitors.find(
-        (v) => v.id === inviteToken && v.email.toLowerCase() === decodeURIComponent(inviteEmail).toLowerCase()
-      );
-
-      if (foundVisitor) {
-        // Guardar información en sessionStorage para acceso temporal
-        sessionStorage.setItem(`invite_${id}_${inviteToken}`, JSON.stringify({
-          email: foundVisitor.email,
-          allowedTabs: foundVisitor.allowedTabs,
-          projectId: id,
-        }));
-
-        // Actualizar estado del visitante a 'accepted'
-        updateVisitor(id, inviteToken, { status: 'accepted' });
-
-        // Guardar información del visitante en el estado
-        setInviteVisitor({
-          allowedTabs: foundVisitor.allowedTabs,
-          email: foundVisitor.email,
-        });
-
-        // Limpiar parámetros de la URL
-        const newSearchParams = new URLSearchParams(searchParams);
-        newSearchParams.delete('invite');
-        newSearchParams.delete('email');
-        window.history.replaceState({}, '', `${window.location.pathname}${newSearchParams.toString() ? '?' + newSearchParams.toString() : ''}`);
-      }
-      setIsLoadingInvite(false);
-    } else {
+    if (!inviteToken || !inviteEmail || !id) {
       // Verificar si hay información de invitación guardada en sessionStorage
       const sessionKeys = Object.keys(sessionStorage);
-      const inviteKey = sessionKeys.find(key => key.startsWith(`invite_${id}_`) || key.startsWith('invite_data_'));
+      const inviteKey = sessionKeys.find(key => 
+        key.startsWith(`invite_${id}_`) || key.startsWith('invite_data_')
+      );
+      
       if (inviteKey) {
         try {
           const inviteData = JSON.parse(sessionStorage.getItem(inviteKey) || '{}');
@@ -122,35 +122,125 @@ export default function Project() {
           console.error('Error parsing invite data:', e);
         }
       }
+      return;
     }
-  }, [searchParams, id, projectVisitors, updateVisitor]);
+
+    setIsLoadingInvite(true);
+    
+    // Primero buscar en sessionStorage
+    if (processInviteFromStorage(inviteToken, inviteEmail, id)) {
+      setIsLoadingInvite(false);
+      return;
+    }
+    
+    // Fallback: buscar el visitante en los visitantes del proyecto
+    const foundVisitor = projectVisitors.find(
+      (v) => v.id === inviteToken && v.email.toLowerCase() === decodeURIComponent(inviteEmail).toLowerCase()
+    );
+
+    if (foundVisitor) {
+      // Guardar información en sessionStorage para acceso temporal
+      sessionStorage.setItem(`invite_${id}_${inviteToken}`, JSON.stringify({
+        email: foundVisitor.email,
+        allowedTabs: foundVisitor.allowedTabs,
+        projectId: id,
+      }));
+
+      // Actualizar estado del visitante a 'accepted'
+      updateVisitor(id, inviteToken, { status: 'accepted' });
+
+      // Guardar información del visitante en el estado
+      setInviteVisitor({
+        allowedTabs: foundVisitor.allowedTabs,
+        email: foundVisitor.email,
+      });
+
+      cleanUrlParams(searchParams);
+    }
+    
+    setIsLoadingInvite(false);
+  }, [searchParams, id, projectVisitors, updateVisitor, processInviteFromStorage]);
 
   // Buscar proyecto o crear uno temporal si hay invitación válida
-  let project = projects.find((p) => p.id === id);
-  
-  // Si el proyecto no se encuentra pero hay una invitación válida, crear un proyecto temporal
-  if (!project && inviteVisitor && inviteVisitor.allowedTabs.length > 0) {
-    project = {
-      id: id!,
-      title: 'Shared Project',
-      description: 'You have been invited to view this project',
-      status: 'pre-produccion',
-      category: 'originals',
-      subcategory: 'feature-film',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-  }
+  const project = useMemo(() => {
+    const foundProject = projects.find((p) => p.id === id);
+    
+    if (!foundProject && inviteVisitor && inviteVisitor.allowedTabs.length > 0) {
+      return createTemporaryProject(id!);
+    }
+    
+    return foundProject;
+  }, [projects, id, inviteVisitor]);
 
   // Verificar si hay un parámetro de tab en la URL
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['colaboradores', 'budget', 'documentos', 'tareas'].includes(tabParam)) {
+    if (tabParam && VALID_TABS.includes(tabParam as TabType)) {
       setActiveTab(tabParam as TabType);
     }
   }, [searchParams]);
 
-  // Mostrar carga mientras se procesa la invitación
+  // Calcular permisos de visitante
+  const visitorPermissions = useMemo(() => {
+    const isVisitor = user?.role === 'visitor' || inviteVisitor !== null;
+    
+    if (!isVisitor) {
+      return { isVisitor: false, allowedTabs: [], visitor: null };
+    }
+
+    const visitor = user?.role === 'visitor'
+      ? projectVisitors.find((v) => v.email === user?.email)
+      : inviteVisitor
+        ? projectVisitors.find((v) => v.email === inviteVisitor.email) || {
+            allowedTabs: inviteVisitor.allowedTabs,
+            email: inviteVisitor.email
+          }
+        : null;
+
+    const allowedTabs = inviteVisitor?.allowedTabs || visitor?.allowedTabs || [];
+    
+    return { isVisitor, allowedTabs, visitor };
+  }, [user, inviteVisitor, projectVisitors]);
+
+  // Si es visitante y la pestaña activa no está permitida, cambiar a la primera permitida
+  useEffect(() => {
+    if (visitorPermissions.isVisitor && 
+        visitorPermissions.allowedTabs.length > 0 && 
+        !visitorPermissions.allowedTabs.includes(activeTab)) {
+      setActiveTab(visitorPermissions.allowedTabs[0]);
+    }
+  }, [visitorPermissions.isVisitor, visitorPermissions.allowedTabs, activeTab]);
+
+  const hasAccess = !visitorPermissions.isVisitor || 
+    (visitorPermissions.allowedTabs.length > 0 && visitorPermissions.allowedTabs.includes(activeTab));
+
+  // Filtrar pestañas según permisos
+  const tabs = useMemo(() => {
+    return visitorPermissions.isVisitor && visitorPermissions.allowedTabs.length > 0
+      ? ALL_TABS.filter((tab) => visitorPermissions.allowedTabs.includes(tab.id))
+      : ALL_TABS;
+  }, [visitorPermissions]);
+
+  // Handlers optimizados
+  const handleAddCollaborator = useCallback((collab: Omit<import('../types').Collaborator, 'id'>) => {
+    if (id) {
+      addCollaborator(id, { ...collab, id: Date.now().toString() });
+    }
+  }, [id, addCollaborator]);
+
+  const handleAddBudgetItem = useCallback((item: Omit<import('../types').BudgetItem, 'id'>) => {
+    if (id) {
+      addBudgetItem(id, { ...item, id: Date.now().toString() });
+    }
+  }, [id, addBudgetItem]);
+
+  const handleAddTask = useCallback((taskData: Omit<import('../types').Task, 'id' | 'projectId'>) => {
+    if (id) {
+      addTask(id, { ...taskData, id: Date.now().toString(), projectId: id });
+    }
+  }, [id, addTask]);
+
+  // Estados de carga y errores
   if (isLoadingInvite) {
     return (
       <div className="project-not-found">
@@ -159,7 +249,6 @@ export default function Project() {
     );
   }
 
-  // Si no se encuentra el proyecto y no hay invitación válida, mostrar "Project not found"
   if (!project && !inviteVisitor) {
     return (
       <div className="project-not-found">
@@ -169,7 +258,6 @@ export default function Project() {
     );
   }
 
-  // Si hay una invitación pero no hay pestañas permitidas, mostrar "Invalid Invitation"
   if (inviteVisitor && inviteVisitor.allowedTabs.length === 0) {
     return (
       <div className="project-not-found">
@@ -180,41 +268,15 @@ export default function Project() {
     );
   }
 
-  // Verificar permisos si es visitante (usuario autenticado como visitante o invitado por enlace)
-  const isVisitor = user?.role === 'visitor' || inviteVisitor !== null;
-  const visitor = isVisitor 
-    ? (user?.role === 'visitor' 
-        ? projectVisitors.find((v) => v.email === user?.email)
-        : inviteVisitor 
-          ? projectVisitors.find((v) => v.email === inviteVisitor.email) || { allowedTabs: inviteVisitor.allowedTabs, email: inviteVisitor.email }
-          : null)
-    : null;
-  const allowedTabsForVisitor = inviteVisitor?.allowedTabs || visitor?.allowedTabs || [];
-  
-  // Si es visitante y la pestaña activa no está permitida, cambiar a la primera permitida
-  useEffect(() => {
-    if (isVisitor && allowedTabsForVisitor.length > 0 && !allowedTabsForVisitor.includes(activeTab)) {
-      setActiveTab(allowedTabsForVisitor[0]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVisitor, allowedTabsForVisitor.length, activeTab]);
-
-  const hasAccess = !isVisitor || (allowedTabsForVisitor.length > 0 && allowedTabsForVisitor.includes(activeTab));
-
-  // Removed unused visitor handler functions
-
-  // Define all available tabs
-  const allTabs: { id: TabType; label: string }[] = [
-    { id: 'colaboradores', label: 'Collaborators' },
-    { id: 'tareas', label: 'Tasks' },
-    { id: 'documentos', label: 'Documents' },
-    { id: 'budget', label: 'Budget' },
-  ];
-
-  // Filtrar pestañas según permisos
-  const tabs = isVisitor && allowedTabsForVisitor.length > 0
-    ? allTabs.filter((tab) => allowedTabsForVisitor.includes(tab.id))
-    : allTabs;
+  // Verificación final: asegurar que project no sea undefined
+  if (!project) {
+    return (
+      <div className="project-not-found">
+        <h2>Project not found</h2>
+        <Link to="/">Back to Projects</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="project-page">
@@ -251,7 +313,7 @@ export default function Project() {
             {activeTab === 'colaboradores' && (
               <CollaboratorsTab
                 collaborators={collaborators[id!] || []}
-                onAdd={(collab) => addCollaborator(id!, { ...collab, id: Date.now().toString() })}
+                onAdd={handleAddCollaborator}
                 onUpdate={(collabId, updates) => updateCollaborator(id!, collabId, updates)}
                 onRemove={(collabId) => removeCollaborator(id!, collabId)}
                 projectId={id}
@@ -261,7 +323,7 @@ export default function Project() {
             {activeTab === 'budget' && (
               <BudgetTab 
                 budgetItems={budgets[id!] || []}
-                onAddItem={(item) => addBudgetItem(id!, { ...item, id: Date.now().toString() })}
+                onAddItem={handleAddBudgetItem}
                 onUpdateItem={(itemId, updates) => updateBudgetItem(id!, itemId, updates)}
                 onRemoveItem={(itemId) => removeBudgetItem(id!, itemId)}
               />
@@ -278,7 +340,7 @@ export default function Project() {
                 tasks={tasks[id!] || []}
                 collaborators={collaborators[id!] || []}
                 projectId={id!}
-                onAddTask={(taskData) => addTask(id!, { ...taskData, id: Date.now().toString(), projectId: id! })}
+                onAddTask={handleAddTask}
                 onUpdateTask={(taskId, updates) => updateTask(id!, taskId, updates)}
                 onRemoveTask={(taskId) => removeTask(id!, taskId)}
               />

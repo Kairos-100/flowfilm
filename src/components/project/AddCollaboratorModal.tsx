@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, Check } from 'lucide-react';
 import { Collaborator, CollaboratorCategory, TabType, Visitor, Project } from '../../types';
 import SimpleCustomSelect from '../SimpleCustomSelect';
@@ -9,25 +9,22 @@ import { getUserStorageKey } from '../../utils/storage';
 import { sendGmailMessage } from '../../services/gmail';
 import './ProjectTabs.css';
 
-const allTabs: { id: TabType; label: string }[] = [
+// Constantes
+const ALL_TABS: { id: TabType; label: string }[] = [
   { id: 'colaboradores', label: 'Collaborators' },
   { id: 'tareas', label: 'Tasks' },
   { id: 'documentos', label: 'Documents' },
   { id: 'budget', label: 'Budget' },
 ];
 
-interface AddCollaboratorModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAdd: (collaborator: Omit<Collaborator, 'id'>) => void;
-  editingCollaborator?: Collaborator | null;
-  projectId?: string;
-  onAddVisitor?: (projectId: string, visitor: Visitor) => void;
-  projects?: Project[];
-  onAddToProject?: (projectId: string, collaborator: Omit<Collaborator, 'id'>) => void;
-}
+const TAB_LABELS: Record<TabType, string> = {
+  'colaboradores': 'Collaborators',
+  'tareas': 'Tasks',
+  'documentos': 'Documents',
+  'budget': 'Budget',
+};
 
-const defaultCategoryLabels: Record<CollaboratorCategory, string> = {
+const DEFAULT_CATEGORY_LABELS: Record<CollaboratorCategory, string> = {
   'coproducers': 'Coproducers',
   'distributor-companies': 'Distributor Companies',
   'studios': 'Studios',
@@ -35,32 +32,7 @@ const defaultCategoryLabels: Record<CollaboratorCategory, string> = {
   'locations': 'Locations',
 };
 
-// Cargar y guardar opciones personalizadas
-const loadCustomOptions = (key: string, defaults: Record<string, string>, userId: string | null) => {
-  try {
-    const storageKey = getUserStorageKey(key, userId);
-    const saved = localStorage.getItem(storageKey);
-    if (saved) {
-      const custom = JSON.parse(saved);
-      // Si hay algo guardado, usar solo eso (sin mezclar con defaults)
-      return custom;
-    }
-  } catch {}
-  // Si no hay nada guardado, usar los defaults y guardarlos
-  if (userId) {
-    localStorage.setItem(getUserStorageKey(key, userId), JSON.stringify(defaults));
-  }
-  return defaults;
-};
-
-const saveCustomOptions = (key: string, options: Record<string, string>, userId: string | null) => {
-  if (userId) {
-    localStorage.setItem(getUserStorageKey(key, userId), JSON.stringify(options));
-  }
-};
-
-// Most common languages for communication
-const languageOptions = [
+const LANGUAGE_OPTIONS = [
   { code: 'es', name: 'Spanish', flag: '🇪🇸' },
   { code: 'en', name: 'English', flag: '🇬🇧' },
   { code: 'fr', name: 'French', flag: '🇫🇷' },
@@ -81,11 +53,61 @@ const languageOptions = [
   { code: 'vi', name: 'Vietnamese', flag: '🇻🇳' },
 ];
 
-export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCollaborator, projectId, onAddVisitor, projects, onAddToProject }: AddCollaboratorModalProps) {
+interface AddCollaboratorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (collaborator: Omit<Collaborator, 'id'>) => void;
+  editingCollaborator?: Collaborator | null;
+  projectId?: string;
+  onAddVisitor?: (projectId: string, visitor: Visitor) => void;
+  projects?: Project[];
+  onAddToProject?: (projectId: string, collaborator: Omit<Collaborator, 'id'>) => void;
+}
+
+// Funciones auxiliares para localStorage
+const loadCustomOptions = (key: string, defaults: Record<string, string>, userId: string | null) => {
+  try {
+    const storageKey = getUserStorageKey(key, userId);
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch {
+    // Ignorar errores de parsing
+  }
+  
+  if (userId) {
+    localStorage.setItem(getUserStorageKey(key, userId), JSON.stringify(defaults));
+  }
+  return defaults;
+};
+
+const saveCustomOptions = (key: string, options: Record<string, string>, userId: string | null) => {
+  if (userId) {
+    localStorage.setItem(getUserStorageKey(key, userId), JSON.stringify(options));
+  }
+};
+
+const generateInviteToken = (): string => {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+};
+
+export default function AddCollaboratorModal({ 
+  isOpen, 
+  onClose, 
+  onAdd, 
+  editingCollaborator, 
+  projectId, 
+  onAddVisitor, 
+  projects, 
+  onAddToProject 
+}: AddCollaboratorModalProps) {
   const { user } = useAuth();
   const userId = user?.id || null;
   const { findContactByName, searchContactsByName, addGlobalContact } = useContacts();
   const { isAuthenticated, accessToken } = useGoogleAuth();
+  
+  // Estados del formulario
   const [category, setCategory] = useState<string>('coproducers');
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
@@ -106,7 +128,7 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
 
   // Cargar opciones personalizadas
   const [categoryLabels, setCategoryLabels] = useState(() => 
-    loadCustomOptions('customCollaboratorCategories', defaultCategoryLabels, userId)
+    loadCustomOptions('customCollaboratorCategories', DEFAULT_CATEGORY_LABELS, userId)
   );
 
   // Preparar opciones para SimpleCustomSelect
@@ -114,19 +136,19 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     return Object.entries(categoryLabels).map(([value, label]) => ({
       value,
       label: String(label),
-      isDefault: Object.keys(defaultCategoryLabels).includes(value),
+      isDefault: Object.keys(DEFAULT_CATEGORY_LABELS).includes(value),
     }));
   }, [categoryLabels]);
 
   // Handlers para opciones personalizadas
-  const handleAddCategory = (value: string, label: string) => {
+  const handleAddCategory = useCallback((value: string, label: string) => {
     const newLabels = { ...categoryLabels, [value]: label };
     setCategoryLabels(newLabels);
     saveCustomOptions('customCollaboratorCategories', newLabels, userId);
     setCategory(value);
-  };
+  }, [categoryLabels, userId]);
 
-  const handleDeleteCategory = (value: string) => {
+  const handleDeleteCategory = useCallback((value: string) => {
     const newLabels = { ...categoryLabels };
     delete newLabels[value];
     setCategoryLabels(newLabels);
@@ -135,73 +157,10 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
       const remainingKeys = Object.keys(newLabels);
       setCategory(remainingKeys.length > 0 ? remainingKeys[0] : 'coproducers');
     }
-  };
-
-  // Efecto para buscar sugerencias cuando cambie el nombre (solo si no hay coincidencia exacta)
-  useEffect(() => {
-    if (name.trim() && !editingCollaborator && isOpen) {
-      const exactMatch = findContactByName(name);
-      if (!exactMatch) {
-        // Solo mostrar sugerencias si no hay coincidencia exacta
-        const suggestions = searchContactsByName(name);
-        setNameSuggestions(suggestions);
-        setShowNameSuggestions(suggestions.length > 0);
-      } else {
-        setNameSuggestions([]);
-        setShowNameSuggestions(false);
-      }
-    } else {
-      setNameSuggestions([]);
-      setShowNameSuggestions(false);
-    }
-  }, [name, editingCollaborator, isOpen, searchContactsByName, findContactByName]);
-
-  // Cargar datos si se está editando
-  useEffect(() => {
-    if (editingCollaborator && isOpen) {
-      setCategory(editingCollaborator.category as string);
-      setName(editingCollaborator.name);
-      setRole(editingCollaborator.role || '');
-      setEmail(editingCollaborator.email || '');
-      setPhone(editingCollaborator.phone || '');
-      // Manejar tanto array como string (para compatibilidad con datos antiguos)
-      if (Array.isArray(editingCollaborator.language)) {
-        setLanguages(editingCollaborator.language);
-      } else if (typeof editingCollaborator.language === 'string') {
-        setLanguages([editingCollaborator.language]);
-      } else {
-        setLanguages([]);
-      }
-      setAddress(editingCollaborator.address || '');
-      setWebsite(editingCollaborator.website || '');
-      setNotes(editingCollaborator.notes || '');
-      setAllergies(editingCollaborator.allergies || '');
-      setHasDrivingLicense(editingCollaborator.hasDrivingLicense || false);
-      setAllowedTabs(editingCollaborator.allowedTabs || []);
-    } else if (!editingCollaborator && isOpen) {
-      resetForm();
-    }
-  }, [editingCollaborator, isOpen]);
-
-  // Cerrar dropdown al hacer click fuera
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (isLanguagesOpen && !target.closest('.languages-dropdown-wrapper')) {
-        setIsLanguagesOpen(false);
-      }
-    };
-
-    if (isLanguagesOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
-  }, [isLanguagesOpen]);
+  }, [categoryLabels, category, userId]);
 
   // Función auxiliar para autocompletar campos del contacto
-  const fillContactFields = (contact: Collaborator) => {
+  const fillContactFields = useCallback((contact: Collaborator) => {
     setEmail(contact.email || '');
     setRole(contact.role || '');
     setPhone(contact.phone || '');
@@ -210,6 +169,7 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     setNotes(contact.notes || '');
     setAllergies(contact.allergies || '');
     setHasDrivingLicense(contact.hasDrivingLicense || false);
+    
     if (contact.language) {
       setLanguages(Array.isArray(contact.language)
         ? contact.language
@@ -217,218 +177,13 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     } else {
       setLanguages([]);
     }
-    if (contact.allowedTabs) {
-      setAllowedTabs(contact.allowedTabs);
-    } else {
-      setAllowedTabs([]);
-    }
+    
+    setAllowedTabs(contact.allowedTabs || []);
     setCategory(contact.category);
-  };
+  }, []);
 
-  // Handler para cuando cambie el nombre
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newName = e.target.value;
-    setName(newName);
-    
-    // Si estamos editando, no autocompletar
-    if (editingCollaborator) {
-      return;
-    }
-    
-    if (newName.trim()) {
-      // Buscar coincidencia exacta primero
-      const exactMatch = findContactByName(newName);
-      if (exactMatch) {
-        fillContactFields(exactMatch);
-        setShowNameSuggestions(false);
-      } else {
-        // Si no hay coincidencia exacta, buscar sugerencias
-        const suggestions = searchContactsByName(newName);
-        setNameSuggestions(suggestions);
-        setShowNameSuggestions(suggestions.length > 0);
-        
-        // Si solo hay una sugerencia y el nombre coincide completamente, autocompletar
-        if (suggestions.length === 1 && suggestions[0].name.toLowerCase() === newName.toLowerCase().trim()) {
-          fillContactFields(suggestions[0]);
-          setShowNameSuggestions(false);
-        }
-      }
-    } else {
-      // Si el campo está vacío, limpiar sugerencias
-      setShowNameSuggestions(false);
-      setNameSuggestions([]);
-    }
-  };
-
-  const handleToggleLanguage = (langCode: string) => {
-    setLanguages(prev => {
-      if (prev.includes(langCode)) {
-        return prev.filter(l => l !== langCode);
-      } else {
-        return [...prev, langCode];
-      }
-    });
-  };
-
-  const handleAddCustomLanguage = () => {
-    const customLang = customLanguageInput.trim();
-    if (customLang && !languages.includes(customLang)) {
-      setLanguages(prev => [...prev, customLang]);
-      setCustomLanguageInput('');
-    }
-  };
-
-  const handleRemoveLanguage = (langCode: string) => {
-    setLanguages(prev => prev.filter(l => l !== langCode));
-  };
-
-  const handleToggleTab = (tabId: TabType) => {
-    if (allowedTabs.includes(tabId)) {
-      setAllowedTabs(allowedTabs.filter((id) => id !== tabId));
-    } else {
-      setAllowedTabs([...allowedTabs, tabId]);
-    }
-  };
-
-  const generateInviteToken = (): string => {
-    // Generar un token único basado en timestamp y random
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-  };
-
-  const handleInviteCollaborator = async () => {
-    if (!projectId || !email.trim() || allowedTabs.length === 0 || !onAddVisitor) {
-      return;
-    }
-
-    try {
-      // Generar token único para la invitación
-      const inviteToken = generateInviteToken();
-      
-      // Crear el Visitor
-      const visitor: Visitor = {
-        id: inviteToken,
-        email: email.trim(),
-        name: name.trim(),
-        invitedAt: new Date(),
-        projectId: projectId,
-        allowedTabs: allowedTabs,
-        status: 'pending',
-      };
-
-      // Añadir el visitante
-      onAddVisitor(projectId, visitor);
-
-      // Guardar información de invitación en sessionStorage para acceso cruzado
-      sessionStorage.setItem(`invite_data_${inviteToken}`, JSON.stringify({
-        email: email.trim(),
-        allowedTabs: allowedTabs,
-        projectId: projectId,
-        name: name.trim(),
-      }));
-
-      // Generar enlace de invitación
-      const inviteUrl = `${window.location.origin}/project/${projectId}?invite=${inviteToken}&email=${encodeURIComponent(email.trim())}`;
-
-      // Intentar enviar email si Gmail está conectado
-      if (isAuthenticated && accessToken) {
-        try {
-          const emailBody = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #333;">You've been invited to collaborate</h2>
-              <p>Hello ${name.trim()},</p>
-              <p>You have been invited to collaborate on this project with access to the following sections:</p>
-              <ul style="list-style-type: none; padding-left: 0;">
-                ${allowedTabs.map(tab => {
-                  const tabLabels: Record<TabType, string> = {
-                    'colaboradores': 'Collaborators',
-                    'tareas': 'Tasks',
-                    'documentos': 'Documents',
-                    'budget': 'Budget',
-                  };
-                  return `<li style="padding: 5px 0;">✓ ${tabLabels[tab] || tab}</li>`;
-                }).join('')}
-              </ul>
-              <div style="margin: 30px 0; text-align: center;">
-                <a href="${inviteUrl}" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Accept Invitation</a>
-              </div>
-              <p style="color: #666; font-size: 12px;">Or copy and paste this link into your browser:</p>
-              <p style="color: #666; font-size: 12px; word-break: break-all;">${inviteUrl}</p>
-            </div>
-          `;
-
-          await sendGmailMessage(
-            accessToken,
-            email.trim(),
-            `Invitation to collaborate on project`,
-            emailBody
-          );
-          
-          // Mostrar mensaje de éxito
-          alert('¡Invitación enviada por email exitosamente!');
-        } catch (error) {
-          console.error('Error sending email:', error);
-          // Si falla el envío de email, copiar al portapapeles
-          await navigator.clipboard.writeText(inviteUrl);
-          alert('No se pudo enviar el email, pero el enlace de invitación ha sido copiado al portapapeles.');
-        }
-      } else {
-        // Si no hay Gmail conectado, copiar al portapapeles
-        await navigator.clipboard.writeText(inviteUrl);
-        alert('¡Enlace de invitación copiado al portapapeles! Compártelo con el colaborador.');
-      }
-    } catch (error) {
-      console.error('Error creating invitation:', error);
-      alert('Error al crear la invitación. Por favor, inténtalo de nuevo.');
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (name.trim()) {
-      // Solo es visitante si la categoría explícitamente contiene "visitante"
-      // Las pestañas permitidas son independientes de la categoría
-      const isVisitor = category.toLowerCase().includes('visitante');
-      
-      const collaboratorData = {
-        name: name.trim(),
-        role: role.trim() || undefined,
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
-        category: category as CollaboratorCategory,
-        language: languages.length > 0 ? languages : undefined,
-        address: address.trim() || undefined,
-        website: website.trim() || undefined,
-        notes: notes.trim() || undefined,
-        allergies: allergies.trim() || undefined,
-        hasDrivingLicense: hasDrivingLicense || undefined,
-        isVisitor: isVisitor || undefined,
-        allowedTabs: allowedTabs.length > 0 ? allowedTabs : undefined,
-      };
-      
-      // Si estamos editando y hay pestañas seleccionadas y email, enviar invitación automáticamente
-      if (editingCollaborator && allowedTabs.length > 0 && email.trim() && projectId && onAddVisitor) {
-        await handleInviteCollaborator();
-      }
-      
-      // Si hay un proyecto seleccionado desde Contacts, añadirlo al proyecto
-      if (selectedProjectId && onAddToProject) {
-        onAddToProject(selectedProjectId, collaboratorData);
-      }
-      
-      // Solo guardar en la base de datos global si NO estamos en la página de Contacts
-      // (porque desde Contacts, el callback onAdd ya lo hace)
-      if (projectId) {
-        addGlobalContact(collaboratorData);
-      }
-      
-      // Llamar al callback del padre
-      onAdd(collaboratorData);
-      resetForm();
-      onClose();
-    }
-  };
-
-  const resetForm = () => {
+  // Resets all form fields
+  const resetForm = useCallback(() => {
     setName('');
     setRole('');
     setEmail('');
@@ -446,12 +201,266 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     setShowNameSuggestions(false);
     setCustomLanguageInput('');
     setSelectedProjectId('');
-  };
+  }, []);
 
-  const handleClose = () => {
+  // Efecto para buscar sugerencias cuando cambie el nombre
+  useEffect(() => {
+    if (!name.trim() || editingCollaborator || !isOpen) {
+      setNameSuggestions([]);
+      setShowNameSuggestions(false);
+      return;
+    }
+
+    const exactMatch = findContactByName(name);
+    if (exactMatch) {
+      setNameSuggestions([]);
+      setShowNameSuggestions(false);
+    } else {
+      const suggestions = searchContactsByName(name);
+      setNameSuggestions(suggestions);
+      setShowNameSuggestions(suggestions.length > 0);
+    }
+  }, [name, editingCollaborator, isOpen, searchContactsByName, findContactByName]);
+
+  // Cargar datos si se está editando
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (editingCollaborator) {
+      setCategory(editingCollaborator.category as string);
+      setName(editingCollaborator.name);
+      setRole(editingCollaborator.role || '');
+      setEmail(editingCollaborator.email || '');
+      setPhone(editingCollaborator.phone || '');
+      
+      if (Array.isArray(editingCollaborator.language)) {
+        setLanguages(editingCollaborator.language);
+      } else if (typeof editingCollaborator.language === 'string') {
+        setLanguages([editingCollaborator.language]);
+      } else {
+        setLanguages([]);
+      }
+      
+      setAddress(editingCollaborator.address || '');
+      setWebsite(editingCollaborator.website || '');
+      setNotes(editingCollaborator.notes || '');
+      setAllergies(editingCollaborator.allergies || '');
+      setHasDrivingLicense(editingCollaborator.hasDrivingLicense || false);
+      setAllowedTabs(editingCollaborator.allowedTabs || []);
+    } else {
+      resetForm();
+    }
+  }, [editingCollaborator, isOpen, resetForm]);
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    if (!isLanguagesOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.languages-dropdown-wrapper')) {
+        setIsLanguagesOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isLanguagesOpen]);
+
+  // Handler para cuando cambie el nombre
+  const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newName = e.target.value;
+    setName(newName);
+    
+    if (editingCollaborator || !newName.trim()) {
+      return;
+    }
+    
+    const exactMatch = findContactByName(newName);
+    if (exactMatch) {
+      fillContactFields(exactMatch);
+      setShowNameSuggestions(false);
+    } else {
+      const suggestions = searchContactsByName(newName);
+      setNameSuggestions(suggestions);
+      setShowNameSuggestions(suggestions.length > 0);
+      
+      // Si solo hay una sugerencia y el nombre coincide completamente, autocompletar
+      if (suggestions.length === 1 && suggestions[0].name.toLowerCase() === newName.toLowerCase().trim()) {
+        fillContactFields(suggestions[0]);
+        setShowNameSuggestions(false);
+      }
+    }
+  }, [editingCollaborator, findContactByName, searchContactsByName, fillContactFields]);
+
+  const handleToggleLanguage = useCallback((langCode: string) => {
+    setLanguages(prev => 
+      prev.includes(langCode)
+        ? prev.filter(l => l !== langCode)
+        : [...prev, langCode]
+    );
+  }, []);
+
+  const handleAddCustomLanguage = useCallback(() => {
+    const customLang = customLanguageInput.trim();
+    if (customLang && !languages.includes(customLang)) {
+      setLanguages(prev => [...prev, customLang]);
+      setCustomLanguageInput('');
+    }
+  }, [customLanguageInput, languages]);
+
+  const handleRemoveLanguage = useCallback((langCode: string) => {
+    setLanguages(prev => prev.filter(l => l !== langCode));
+  }, []);
+
+  const handleToggleTab = useCallback((tabId: TabType) => {
+    setAllowedTabs(prev => 
+      prev.includes(tabId)
+        ? prev.filter(id => id !== tabId)
+        : [...prev, tabId]
+    );
+  }, []);
+
+  const handleInviteCollaborator = useCallback(async () => {
+    if (!projectId || !email.trim() || allowedTabs.length === 0 || !onAddVisitor) {
+      return;
+    }
+
+    try {
+      const inviteToken = generateInviteToken();
+      
+      const visitor: Visitor = {
+        id: inviteToken,
+        email: email.trim(),
+        name: name.trim(),
+        invitedAt: new Date(),
+        projectId: projectId,
+        allowedTabs: allowedTabs,
+        status: 'pending',
+      };
+
+      onAddVisitor(projectId, visitor);
+
+      // Guardar información de invitación en sessionStorage
+      sessionStorage.setItem(`invite_data_${inviteToken}`, JSON.stringify({
+        email: email.trim(),
+        allowedTabs: allowedTabs,
+        projectId: projectId,
+        name: name.trim(),
+      }));
+
+      const inviteUrl = `${window.location.origin}/project/${projectId}?invite=${inviteToken}&email=${encodeURIComponent(email.trim())}`;
+
+      // Intentar enviar email si Gmail está conectado
+      if (isAuthenticated && accessToken) {
+        try {
+          const tabList = allowedTabs.map(tab => 
+            `<li style="padding: 5px 0;">✓ ${TAB_LABELS[tab] || tab}</li>`
+          ).join('');
+
+          const emailBody = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">You've been invited to collaborate</h2>
+              <p>Hello ${name.trim()},</p>
+              <p>You have been invited to collaborate on this project with access to the following sections:</p>
+              <ul style="list-style-type: none; padding-left: 0;">
+                ${tabList}
+              </ul>
+              <div style="margin: 30px 0; text-align: center;">
+                <a href="${inviteUrl}" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Accept Invitation</a>
+              </div>
+              <p style="color: #666; font-size: 12px;">Or copy and paste this link into your browser:</p>
+              <p style="color: #666; font-size: 12px; word-break: break-all;">${inviteUrl}</p>
+            </div>
+          `;
+
+          await sendGmailMessage(
+            accessToken,
+            email.trim(),
+            'Invitation to collaborate on project',
+            emailBody
+          );
+          
+          alert('¡Invitación enviada por email exitosamente!');
+        } catch (error) {
+          console.error('Error sending email:', error);
+          await navigator.clipboard.writeText(inviteUrl);
+          alert('No se pudo enviar el email, pero el enlace de invitación ha sido copiado al portapapeles.');
+        }
+      } else {
+        await navigator.clipboard.writeText(inviteUrl);
+        alert('¡Enlace de invitación copiado al portapapeles! Compártelo con el colaborador.');
+      }
+    } catch (error) {
+      console.error('Error creating invitation:', error);
+      alert('Error al crear la invitación. Por favor, inténtalo de nuevo.');
+    }
+  }, [projectId, email, name, allowedTabs, onAddVisitor, isAuthenticated, accessToken]);
+
+  const handleClose = useCallback(() => {
     resetForm();
     onClose();
-  };
+  }, [resetForm, onClose]);
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!name.trim()) return;
+
+    const isVisitor = category.toLowerCase().includes('visitante');
+    
+    const collaboratorData: Omit<Collaborator, 'id'> = {
+      name: name.trim(),
+      role: role.trim() || undefined,
+      email: email.trim() || undefined,
+      phone: phone.trim() || undefined,
+      category: category as CollaboratorCategory,
+      language: languages.length > 0 ? languages : undefined,
+      address: address.trim() || undefined,
+      website: website.trim() || undefined,
+      notes: notes.trim() || undefined,
+      allergies: allergies.trim() || undefined,
+      hasDrivingLicense: hasDrivingLicense || undefined,
+      isVisitor: isVisitor || undefined,
+      allowedTabs: allowedTabs.length > 0 ? allowedTabs : undefined,
+    };
+    
+    // Si estamos editando y hay pestañas seleccionadas y email, enviar invitación automáticamente
+    if (editingCollaborator && allowedTabs.length > 0 && email.trim() && projectId && onAddVisitor) {
+      await handleInviteCollaborator();
+    }
+    
+    // Si hay un proyecto seleccionado desde Contacts, añadirlo al proyecto
+    if (selectedProjectId && onAddToProject) {
+      onAddToProject(selectedProjectId, collaboratorData);
+    }
+    
+    // Solo guardar en la base de datos global si NO estamos en la página de Contacts
+    if (projectId) {
+      addGlobalContact(collaboratorData);
+    }
+    
+    onAdd(collaboratorData);
+    resetForm();
+    onClose();
+  }, [
+    name, role, email, phone, category, languages, address, website, notes, 
+    allergies, hasDrivingLicense, allowedTabs, editingCollaborator, projectId, 
+    onAddVisitor, selectedProjectId, onAddToProject, addGlobalContact, 
+    onAdd, resetForm, onClose, handleInviteCollaborator
+  ]);
+
+  // Calcular idiomas seleccionados para mostrar
+  const selectedLanguagesDisplay = useMemo(() => {
+    return languages.map((langCode) => {
+      const lang = LANGUAGE_OPTIONS.find(l => l.code === langCode);
+      return lang ? `${lang.flag} ${lang.name}` : langCode;
+    }).join(', ');
+  }, [languages]);
+
+  const customLanguages = useMemo(() => {
+    return languages.filter(l => !LANGUAGE_OPTIONS.find(lo => lo.code === l));
+  }, [languages]);
 
   if (!isOpen) return null;
 
@@ -521,7 +530,6 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
                   }
                 }}
                 onBlur={() => {
-                  // Delay to allow click on suggestions
                   setTimeout(() => setShowNameSuggestions(false), 200);
                 }}
                 placeholder={category === 'locations' ? 'Location name' : 'Name or company name'}
@@ -603,19 +611,14 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
                 onClick={() => setIsLanguagesOpen(!isLanguagesOpen)}
               >
                 <span>
-                  {languages.length > 0
-                    ? languages.map((langCode) => {
-                        const lang = languageOptions.find(l => l.code === langCode);
-                        return lang ? `${lang.flag} ${lang.name}` : langCode;
-                      }).join(', ')
-                    : 'Select languages'}
+                  {languages.length > 0 ? selectedLanguagesDisplay : 'Select languages'}
                 </span>
                 <span className="dropdown-arrow">{isLanguagesOpen ? '▲' : '▼'}</span>
               </button>
               {isLanguagesOpen && (
                 <div className="languages-dropdown-menu">
                   <div className="languages-row">
-                    {languageOptions.map((lang) => (
+                    {LANGUAGE_OPTIONS.map((lang) => (
                       <label key={lang.code} className="language-checkbox-item">
                         <input
                           type="checkbox"
@@ -653,11 +656,11 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
                         Add
                       </button>
                     </div>
-                    {languages.filter(l => !languageOptions.find(lo => lo.code === l)).length > 0 && (
+                    {customLanguages.length > 0 && (
                       <div style={{ marginTop: '8px' }}>
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Custom languages:</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {languages.filter(l => !languageOptions.find(lo => lo.code === l)).map((customLang) => (
+                          {customLanguages.map((customLang) => (
                             <span
                               key={customLang}
                               style={{
@@ -699,7 +702,7 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
           <div className="form-group">
             <label>Allowed Tabs</label>
             <div className="tabs-checkboxes-optimized">
-              {allTabs.map((tab) => (
+              {ALL_TABS.map((tab) => (
                 <label key={tab.id} className="tab-checkbox-optimized">
                   <input
                     type="checkbox"
