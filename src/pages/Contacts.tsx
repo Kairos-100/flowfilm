@@ -82,7 +82,11 @@ export default function Contacts() {
   };
 
   const handleAddToProject = (projectId: string, collaborator: Omit<Collaborator, 'id'>) => {
-    addCollaborator(projectId, collaborator);
+    const collaboratorWithId: Collaborator = {
+      ...collaborator,
+      id: Date.now().toString(),
+    };
+    addCollaborator(projectId, collaboratorWithId);
   };
 
   const handleEdit = (contact: Collaborator) => {

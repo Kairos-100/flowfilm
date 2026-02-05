@@ -203,6 +203,31 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     }
   }, [isLanguagesOpen]);
 
+  // Función auxiliar para autocompletar campos del contacto
+  const fillContactFields = (contact: Collaborator) => {
+    setEmail(contact.email || '');
+    setRole(contact.role || '');
+    setPhone(contact.phone || '');
+    setAddress(contact.address || '');
+    setWebsite(contact.website || '');
+    setNotes(contact.notes || '');
+    setAllergies(contact.allergies || '');
+    setHasDrivingLicense(contact.hasDrivingLicense || false);
+    if (contact.language) {
+      setLanguages(Array.isArray(contact.language)
+        ? contact.language
+        : (typeof contact.language === 'string' ? [contact.language] : []));
+    } else {
+      setLanguages([]);
+    }
+    if (contact.allowedTabs) {
+      setAllowedTabs(contact.allowedTabs);
+    } else {
+      setAllowedTabs([]);
+    }
+    setCategory(contact.category);
+  };
+
   // Handler para cuando cambie el nombre
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newName = e.target.value;
@@ -217,28 +242,7 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
       // Buscar coincidencia exacta primero
       const exactMatch = findContactByName(newName);
       if (exactMatch) {
-        // Autocompletar todos los campos automáticamente
-        setEmail(exactMatch.email || '');
-        setRole(exactMatch.role || '');
-        setPhone(exactMatch.phone || '');
-        setAddress(exactMatch.address || '');
-        setWebsite(exactMatch.website || '');
-        setNotes(exactMatch.notes || '');
-        setAllergies(exactMatch.allergies || '');
-        setHasDrivingLicense(exactMatch.hasDrivingLicense || false);
-        if (exactMatch.language) {
-          setLanguages(Array.isArray(exactMatch.language) 
-            ? exactMatch.language 
-            : (typeof exactMatch.language === 'string' ? [exactMatch.language] : []));
-        } else {
-          setLanguages([]);
-        }
-        if (exactMatch.allowedTabs) {
-          setAllowedTabs(exactMatch.allowedTabs);
-        } else {
-          setAllowedTabs([]);
-        }
-        setCategory(exactMatch.category);
+        fillContactFields(exactMatch);
         setShowNameSuggestions(false);
       } else {
         // Si no hay coincidencia exacta, buscar sugerencias
@@ -248,28 +252,7 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
         
         // Si solo hay una sugerencia y el nombre coincide completamente, autocompletar
         if (suggestions.length === 1 && suggestions[0].name.toLowerCase() === newName.toLowerCase().trim()) {
-          const contact = suggestions[0];
-          setEmail(contact.email || '');
-          setRole(contact.role || '');
-          setPhone(contact.phone || '');
-          setAddress(contact.address || '');
-          setWebsite(contact.website || '');
-          setNotes(contact.notes || '');
-          setAllergies(contact.allergies || '');
-          setHasDrivingLicense(contact.hasDrivingLicense || false);
-          if (contact.language) {
-            setLanguages(Array.isArray(contact.language) 
-              ? contact.language 
-              : (typeof contact.language === 'string' ? [contact.language] : []));
-          } else {
-            setLanguages([]);
-          }
-          if (contact.allowedTabs) {
-            setAllowedTabs(contact.allowedTabs);
-          } else {
-            setAllowedTabs([]);
-          }
-          setCategory(contact.category);
+          fillContactFields(suggestions[0]);
           setShowNameSuggestions(false);
         }
       }
@@ -559,29 +542,9 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
                       key={contact.id}
                       className="suggestion-item"
                       onMouseDown={(e) => {
-                        e.preventDefault(); // Prevenir blur del input
+                        e.preventDefault();
                         setName(contact.name);
-                        setEmail(contact.email || '');
-                        setRole(contact.role || '');
-                        setPhone(contact.phone || '');
-                        setAddress(contact.address || '');
-                        setWebsite(contact.website || '');
-                        setNotes(contact.notes || '');
-                        setAllergies(contact.allergies || '');
-                        setHasDrivingLicense(contact.hasDrivingLicense || false);
-                        if (contact.language) {
-                          setLanguages(Array.isArray(contact.language) 
-                            ? contact.language 
-                            : (typeof contact.language === 'string' ? [contact.language] : []));
-                        } else {
-                          setLanguages([]);
-                        }
-                        if (contact.allowedTabs) {
-                          setAllowedTabs(contact.allowedTabs);
-                        } else {
-                          setAllowedTabs([]);
-                        }
-                        setCategory(contact.category);
+                        fillContactFields(contact);
                         setShowNameSuggestions(false);
                       }}
                     >
