@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, Check, Share2, Copy, CheckCircle } from 'lucide-react';
-import { Collaborator, CollaboratorCategory, TabType, Visitor } from '../../types';
+import { Collaborator, CollaboratorCategory, TabType, Visitor, Project } from '../../types';
 import SimpleCustomSelect from '../SimpleCustomSelect';
 import { useContacts } from '../../contexts/ContactsContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,6 +23,8 @@ interface AddCollaboratorModalProps {
   editingCollaborator?: Collaborator | null;
   projectId?: string;
   onAddVisitor?: (projectId: string, visitor: Visitor) => void;
+  projects?: Project[];
+  onAddToProject?: (projectId: string, collaborator: Omit<Collaborator, 'id'>) => void;
 }
 
 const defaultCategoryLabels: Record<CollaboratorCategory, string> = {
@@ -79,7 +81,7 @@ const languageOptions = [
   { code: 'vi', name: 'Vietnamese', flag: '🇻🇳' },
 ];
 
-export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCollaborator, projectId, onAddVisitor }: AddCollaboratorModalProps) {
+export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCollaborator, projectId, onAddVisitor, projects, onAddToProject }: AddCollaboratorModalProps) {
   const { user } = useAuth();
   const userId = user?.id || null;
   const { findContactByName, searchContactsByName, addGlobalContact } = useContacts();
@@ -103,6 +105,7 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
   // Cargar opciones personalizadas
   const [categoryLabels, setCategoryLabels] = useState(() => 
@@ -401,7 +404,7 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim()) {
       // Solo es visitante si la categoría explícitamente contiene "visitante"
@@ -424,8 +427,21 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
         allowedTabs: allowedTabs.length > 0 ? allowedTabs : undefined,
       };
       
-      // Guardar en la base de datos global
-      addGlobalContact(collaboratorData);
+      // Si estamos editando y hay pestañas seleccionadas y email, enviar invitación automáticamente
+      if (editingCollaborator && allowedTabs.length > 0 && email.trim() && projectId && onAddVisitor) {
+        await handleInviteCollaborator();
+      }
+      
+      // Si hay un proyecto seleccionado desde Contacts, añadirlo al proyecto
+      if (selectedProjectId && onAddToProject) {
+        onAddToProject(selectedProjectId, collaboratorData);
+      }
+      
+      // Solo guardar en la base de datos global si NO estamos en la página de Contacts
+      // (porque desde Contacts, el callback onAdd ya lo hace)
+      if (projectId) {
+        addGlobalContact(collaboratorData);
+      }
       
       // Llamar al callback del padre
       onAdd(collaboratorData);
@@ -453,6 +469,7 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     setCustomLanguageInput('');
     setInviteLink(null);
     setLinkCopied(false);
+    setSelectedProjectId('');
   };
 
   const handleClose = () => {
@@ -483,6 +500,34 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
             allowCustom={true}
             placeholder="Select category..."
           />
+
+          {/* Selector de proyectos cuando se usa desde Contacts */}
+          {!projectId && projects && projects.length > 0 && (
+            <div className="form-group">
+              <label htmlFor="project">Assign to Project (Optional)</label>
+              <select
+                id="project"
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="">None</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="form-group">
             <label htmlFor="name">

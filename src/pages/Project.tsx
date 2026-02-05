@@ -32,6 +32,7 @@ export default function Project() {
     updateBudgetItem,
     removeBudgetItem,
     addVisitor,
+    updateVisitor,
     addTask,
     updateTask,
     removeTask,
@@ -39,6 +40,61 @@ export default function Project() {
 
   const project = projects.find((p) => p.id === id);
   const projectVisitors = visitors[id!] || [];
+  const [inviteVisitor, setInviteVisitor] = useState<{ allowedTabs: TabType[]; email: string } | null>(null);
+
+  // Manejar parámetros de invitación en la URL
+  useEffect(() => {
+    const inviteToken = searchParams.get('invite');
+    const inviteEmail = searchParams.get('email');
+
+    if (inviteToken && inviteEmail && id) {
+      // Buscar el visitante en los visitantes del proyecto
+      const foundVisitor = projectVisitors.find(
+        (v) => v.id === inviteToken && v.email.toLowerCase() === decodeURIComponent(inviteEmail).toLowerCase()
+      );
+
+      if (foundVisitor) {
+        // Guardar información en sessionStorage para acceso temporal
+        sessionStorage.setItem(`invite_${id}_${inviteToken}`, JSON.stringify({
+          email: foundVisitor.email,
+          allowedTabs: foundVisitor.allowedTabs,
+          projectId: id,
+        }));
+
+        // Actualizar estado del visitante a 'accepted'
+        updateVisitor(id, inviteToken, { status: 'accepted' });
+
+        // Guardar información del visitante en el estado
+        setInviteVisitor({
+          allowedTabs: foundVisitor.allowedTabs,
+          email: foundVisitor.email,
+        });
+
+        // Limpiar parámetros de la URL
+        const newSearchParams = new URLSearchParams(searchParams);
+        newSearchParams.delete('invite');
+        newSearchParams.delete('email');
+        window.history.replaceState({}, '', `${window.location.pathname}${newSearchParams.toString() ? '?' + newSearchParams.toString() : ''}`);
+      }
+    } else {
+      // Verificar si hay información de invitación guardada en sessionStorage
+      const sessionKeys = Object.keys(sessionStorage);
+      const inviteKey = sessionKeys.find(key => key.startsWith(`invite_${id}_`));
+      if (inviteKey) {
+        try {
+          const inviteData = JSON.parse(sessionStorage.getItem(inviteKey) || '{}');
+          if (inviteData.allowedTabs && inviteData.projectId === id) {
+            setInviteVisitor({
+              allowedTabs: inviteData.allowedTabs,
+              email: inviteData.email,
+            });
+          }
+        } catch (e) {
+          console.error('Error parsing invite data:', e);
+        }
+      }
+    }
+  }, [searchParams, id, projectVisitors, updateVisitor]);
 
   // Verificar si hay un parámetro de tab en la URL
   useEffect(() => {
@@ -57,20 +113,26 @@ export default function Project() {
     );
   }
 
-  // Verificar permisos si es visitante
-  const isVisitor = user?.role === 'visitor';
-  const visitor = isVisitor ? projectVisitors.find((v) => v.email === user?.email) : null;
-  const allowedTabsForVisitor = visitor?.allowedTabs || [];
+  // Verificar permisos si es visitante (usuario autenticado como visitante o invitado por enlace)
+  const isVisitor = user?.role === 'visitor' || inviteVisitor !== null;
+  const visitor = isVisitor 
+    ? (user?.role === 'visitor' 
+        ? projectVisitors.find((v) => v.email === user?.email)
+        : inviteVisitor 
+          ? projectVisitors.find((v) => v.email === inviteVisitor.email) || { allowedTabs: inviteVisitor.allowedTabs, email: inviteVisitor.email }
+          : null)
+    : null;
+  const allowedTabsForVisitor = inviteVisitor?.allowedTabs || visitor?.allowedTabs || [];
   
   // Si es visitante y la pestaña activa no está permitida, cambiar a la primera permitida
   useEffect(() => {
-    if (isVisitor && visitor && !allowedTabsForVisitor.includes(activeTab) && allowedTabsForVisitor.length > 0) {
+    if (isVisitor && allowedTabsForVisitor.length > 0 && !allowedTabsForVisitor.includes(activeTab)) {
       setActiveTab(allowedTabsForVisitor[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVisitor, visitor?.id, activeTab]);
+  }, [isVisitor, allowedTabsForVisitor.length, activeTab]);
 
-  const hasAccess = !isVisitor || (visitor && visitor.allowedTabs.includes(activeTab));
+  const hasAccess = !isVisitor || (allowedTabsForVisitor.length > 0 && allowedTabsForVisitor.includes(activeTab));
 
   // Removed unused visitor handler functions
 
@@ -83,7 +145,7 @@ export default function Project() {
   ];
 
   // Filtrar pestañas según permisos
-  const tabs = isVisitor && visitor
+  const tabs = isVisitor && allowedTabsForVisitor.length > 0
     ? allTabs.filter((tab) => allowedTabsForVisitor.includes(tab.id))
     : allTabs;
 

@@ -23,6 +23,19 @@ import './App.css';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
+  const [searchParams] = useSearchParams();
+  
+  // Permitir acceso si hay parámetros de invitación válidos
+  const inviteToken = searchParams.get('invite');
+  const inviteEmail = searchParams.get('email');
+  const hasInviteParams = inviteToken && inviteEmail;
+  
+  // Si hay parámetros de invitación, permitir acceso (la validación se hará en Project.tsx)
+  // Si no hay parámetros de invitación, requerir autenticación normal
+  if (hasInviteParams) {
+    return <>{children}</>;
+  }
+  
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 

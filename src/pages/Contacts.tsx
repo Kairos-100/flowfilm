@@ -3,6 +3,7 @@ import { Plus, Mail, Phone, Globe, Trash2, Edit2, Languages, Users, AlertTriangl
 import { Collaborator, CollaboratorCategory } from '../types';
 import AddCollaboratorModal from '../components/project/AddCollaboratorModal';
 import { useContacts } from '../contexts/ContactsContext';
+import { useProjects } from '../contexts/ProjectsContext';
 import '../components/project/ProjectTabs.css';
 import './Contacts.css';
 
@@ -46,6 +47,7 @@ const categoryOrder: CollaboratorCategory[] = [
 
 export default function Contacts() {
   const { globalContacts, addGlobalContact, updateGlobalContactById, removeGlobalContact } = useContacts();
+  const { projects, addCollaborator } = useProjects();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Collaborator | null>(null);
 
@@ -77,6 +79,10 @@ export default function Contacts() {
   const handleAdd = (contact: Omit<Collaborator, 'id'>) => {
     addGlobalContact(contact);
     setIsModalOpen(false);
+  };
+
+  const handleAddToProject = (projectId: string, collaborator: Omit<Collaborator, 'id'>) => {
+    addCollaborator(projectId, collaborator);
   };
 
   const handleEdit = (contact: Collaborator) => {
@@ -298,6 +304,8 @@ export default function Contacts() {
           onClose={handleCloseModal}
           onAdd={editingContact ? handleUpdate : handleAdd}
           editingCollaborator={editingContact}
+          projects={projects}
+          onAddToProject={handleAddToProject}
         />
       </div>
     </div>
