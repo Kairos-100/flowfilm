@@ -99,20 +99,30 @@ export default function Project() {
 
   // Manejar parámetros de invitación en la URL
   useEffect(() => {
+    // Si el usuario es admin o member, limpiar cualquier estado de invitación y salir
+    if (user && (user.role === 'admin' || user.role === 'member')) {
+      if (inviteVisitor !== null) {
+        setInviteVisitor(null);
+      }
+      return;
+    }
+
     const inviteToken = searchParams.get('invite');
     const inviteEmail = searchParams.get('email');
 
     if (!inviteToken || !inviteEmail || !id) {
       // Verificar si hay información de invitación guardada en sessionStorage
+      // Solo aplicar si el usuario es visitor y el email coincide
       const sessionKeys = Object.keys(sessionStorage);
       const inviteKey = sessionKeys.find(key => 
         key.startsWith(`invite_${id}_`) || key.startsWith('invite_data_')
       );
       
-      if (inviteKey) {
+      if (inviteKey && user?.role === 'visitor') {
         try {
           const inviteData = JSON.parse(sessionStorage.getItem(inviteKey) || '{}');
-          if (inviteData.allowedTabs && inviteData.projectId === id) {
+          const emailMatch = inviteData.email?.toLowerCase() === user?.email?.toLowerCase();
+          if (inviteData.allowedTabs && inviteData.projectId === id && emailMatch) {
             setInviteVisitor({
               allowedTabs: inviteData.allowedTabs,
               email: inviteData.email,
@@ -159,7 +169,7 @@ export default function Project() {
     }
     
     setIsLoadingInvite(false);
-  }, [searchParams, id, projectVisitors, updateVisitor, processInviteFromStorage]);
+  }, [searchParams, id, projectVisitors, updateVisitor, processInviteFromStorage, user, inviteVisitor]);
 
   // Buscar proyecto o crear uno temporal si hay invitación válida
   const project = useMemo(() => {
@@ -182,6 +192,11 @@ export default function Project() {
 
   // Calcular permisos de visitante
   const visitorPermissions = useMemo(() => {
+    // Si el usuario es admin o member, nunca es visitante
+    if (user && (user.role === 'admin' || user.role === 'member')) {
+      return { isVisitor: false, allowedTabs: [] as TabType[], visitor: null };
+    }
+
     const isVisitor = user?.role === 'visitor' || inviteVisitor !== null;
     
     if (!isVisitor) {
