@@ -1,0 +1,35 @@
+.contacts-page {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.contacts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.contacts-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.contacts-header-left h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.contacts-header-left svg {
+  color: var(--accent);
+}
+
+.empty-state-subtitle {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 8px;
+}

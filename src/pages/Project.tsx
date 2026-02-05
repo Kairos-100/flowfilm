@@ -31,7 +31,7 @@ export default function Project() {
     addBudgetItem,
     updateBudgetItem,
     removeBudgetItem,
-    // Removed unused visitor functions
+    addVisitor,
     addTask,
     updateTask,
     removeTask,
@@ -125,6 +125,8 @@ export default function Project() {
                 onAdd={(collab) => addCollaborator(id!, { ...collab, id: Date.now().toString() })}
                 onUpdate={(collabId, updates) => updateCollaborator(id!, collabId, updates)}
                 onRemove={(collabId) => removeCollaborator(id!, collabId)}
+                projectId={id}
+                onAddVisitor={addVisitor}
               />
             )}
             {activeTab === 'budget' && (

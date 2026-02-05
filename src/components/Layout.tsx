@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Film, Calendar, LogOut, User, Moon, Sun, Award, Mail, Bell } from 'lucide-react';
+import { Film, Calendar, LogOut, User, Moon, Sun, Award, Mail, Bell, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useProjects } from '../contexts/ProjectsContext';
@@ -99,6 +99,13 @@ export default function Layout({ children }: LayoutProps) {
             {unreadCount > 0 && (
               <span className="notification-badge">{unreadCount}</span>
             )}
+          </Link>
+          <Link
+            to="/contacts"
+            className={`nav-item ${location.pathname === '/contacts' ? 'active' : ''}`}
+          >
+            <Users size={20} />
+            <span>Contacts</span>
           </Link>
           <Link
             to="/calendar"

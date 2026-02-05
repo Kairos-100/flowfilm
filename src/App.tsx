@@ -13,6 +13,7 @@ import Project from './pages/Project';
 import Calendar from './pages/Calendar';
 import Gmail from './pages/Gmail';
 import Notifications from './pages/Notifications';
+import Contacts from './pages/Contacts';
 import Festivals from './pages/Festivals';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -161,6 +162,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <Layout>
               <Notifications />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/contacts"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Contacts />
             </Layout>
           </ProtectedRoute>
         }

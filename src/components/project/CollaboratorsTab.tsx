@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Plus, Mail, Phone, Globe, Trash2, Edit2, Languages } from 'lucide-react';
-import { Collaborator, CollaboratorCategory } from '../../types';
+import { Plus, Mail, Phone, Globe, Trash2, Edit2, Languages, AlertTriangle, Car } from 'lucide-react';
+import { Collaborator, CollaboratorCategory, Visitor } from '../../types';
 import AddCollaboratorModal from './AddCollaboratorModal';
 import './ProjectTabs.css';
 
@@ -31,6 +31,8 @@ interface CollaboratorsTabProps {
   onAdd: (collaborator: Omit<Collaborator, 'id'>) => void;
   onUpdate: (collaboratorId: string, updates: Partial<Collaborator>) => void;
   onRemove: (collaboratorId: string) => void;
+  projectId?: string;
+  onAddVisitor?: (projectId: string, visitor: Visitor) => void;
 }
 
 const categoryLabels: Record<CollaboratorCategory, string> = {
@@ -54,6 +56,8 @@ export default function CollaboratorsTab({
   onAdd,
   onUpdate,
   onRemove,
+  projectId,
+  onAddVisitor,
 }: CollaboratorsTabProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCollaborator, setEditingCollaborator] = useState<Collaborator | null>(null);
@@ -195,6 +199,18 @@ export default function CollaboratorsTab({
                         {collaborator.notes && (
                           <p className="collaborator-notes">{collaborator.notes}</p>
                         )}
+                        {collaborator.allergies && (
+                          <p className="collaborator-allergies" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                            <AlertTriangle size={14} />
+                            <span><strong>Allergies:</strong> {collaborator.allergies}</span>
+                          </p>
+                        )}
+                        {collaborator.hasDrivingLicense && (
+                          <p className="collaborator-license" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                            <Car size={14} />
+                            <span>Has Driving License</span>
+                          </p>
+                        )}
                       </div>
                       <div className="collaborator-actions">
                         <button
@@ -290,6 +306,8 @@ export default function CollaboratorsTab({
         onClose={handleCloseModal}
         onAdd={editingCollaborator ? handleUpdate : handleAdd}
         editingCollaborator={editingCollaborator}
+        projectId={projectId}
+        onAddVisitor={onAddVisitor}
       />
     </div>
   );

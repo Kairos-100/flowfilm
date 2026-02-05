@@ -44,22 +44,71 @@ const formatFileSize = (bytes: number | string | undefined): string => {
   return (numBytes / (1024 * 1024)).toFixed(1) + ' MB';
 };
 
-// Función helper para guardar configuración de Drive
-const saveDriveConfigToStorage = (
-  userId: string,
-  projectId: string,
-  enabledFolders: string[],
-  selectedFiles: string[]
-): void => {
-  const config = {
-    enabledFolders,
-    selectedFiles,
+// Detectar categoría por nombre o tipo MIME - mejorado para todas las categorías
+function detectCategory(name: string, mimeType: string, availableCategories: CategoryOption[]): DocumentCategory {
+  const lowerName = name.toLowerCase();
+  
+  // Mapa de palabras clave a categorías
+  const categoryMap: Record<string, DocumentCategory> = {
+    'script': 'script',
+    'guion': 'script',
+    'screenplay': 'script',
+    'contract': 'contract',
+    'contrato': 'contract',
+    'agreement': 'contract',
+    'invoice': 'invoice',
+    'factura': 'invoice',
+    'bill': 'invoice',
+    'budget': 'budget',
+    'presupuesto': 'budget',
+    'legal': 'legal',
+    'production': 'production',
+    'produccion': 'production',
+    'marketing': 'marketing',
+    'promo': 'marketing',
+    'publicidad': 'marketing',
   };
-  localStorage.setItem(
-    getUserStorageKey(`projectDriveConfig_${projectId}`, userId),
-    JSON.stringify(config)
-  );
-};
+  
+  // Primero intentar detectar por palabras clave en el nombre
+  for (const [key, cat] of Object.entries(categoryMap)) {
+    if (lowerName.includes(key)) {
+      // Verificar si la categoría existe en las disponibles
+      if (availableCategories.find(c => c.value === cat)) {
+        return cat;
+      }
+    }
+  }
+  
+  // Verificar categorías personalizadas en el nombre
+  for (const cat of availableCategories) {
+    if (cat.value !== 'all' && cat.value !== 'script' && cat.value !== 'other') {
+      const catName = cat.label.toLowerCase();
+      const catValue = cat.value.toLowerCase();
+      if (lowerName.includes(catName) || lowerName.includes(catValue)) {
+        return cat.value as DocumentCategory;
+      }
+    }
+  }
+  
+  // Detectar por tipo MIME
+  if (mimeType.includes('document') || mimeType.includes('text') || mimeType.includes('pdf')) {
+    const scriptCat = availableCategories.find(c => c.value === 'script');
+    if (scriptCat && (mimeType.includes('text/plain') || mimeType.includes('application/vnd.google-apps.document'))) {
+      return 'script';
+    }
+  }
+  
+  // Por defecto, usar 'other' si existe, sino 'script'
+  const otherCat = availableCategories.find(c => c.value === 'other');
+  const scriptCat = availableCategories.find(c => c.value === 'script');
+  
+  if (otherCat) return 'other';
+  if (scriptCat) return 'script';
+  
+  // Si ninguna de las anteriores, usar la primera disponible que no sea 'all'
+  const firstCat = availableCategories.find(c => c.value !== 'all');
+  return (firstCat?.value as DocumentCategory) || 'other';
+}
 
 // Función para convertir nombre a valor (slug)
 const nameToValue = (name: string): string => {
@@ -137,7 +186,6 @@ export default function DocumentsTab({
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [uploadCategory, setUploadCategory] = useState<DocumentCategory>('other');
-  const [categoryUpdateTrigger, setCategoryUpdateTrigger] = useState(0);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
   // Cerrar dropdown cuando se hace click fuera
@@ -272,13 +320,20 @@ export default function DocumentsTab({
   // Función consolidada para guardar configuración
   const saveDriveConfig = useCallback(async (closeModal: () => void, reloadAll = false) => {
     if (!user?.id) return;
-    saveDriveConfigToStorage(user.id, projectId, enabledFolders, selectedDriveFiles);
+    const config = {
+      enabledFolders,
+      selectedFiles: selectedDriveFiles,
+    };
+    localStorage.setItem(
+      getUserStorageKey(`projectDriveConfig_${projectId}`, user.id),
+      JSON.stringify(config)
+    );
     closeModal();
     if (reloadAll) {
       await loadAllDriveFiles();
     }
     loadDriveFiles();
-  }, [user?.id, projectId, enabledFolders, selectedDriveFiles, loadAllDriveFiles, loadDriveFiles]);
+  }, [user?.id, projectId, enabledFolders, selectedDriveFiles]);
 
   const handleSaveFolderConfig = useCallback(() => {
     saveDriveConfig(() => setShowFolderConfig(false));
@@ -288,35 +343,21 @@ export default function DocumentsTab({
     saveDriveConfig(() => setShowDriveSelectModal(false), true);
   }, [saveDriveConfig]);
 
-  const toggleFolder = useCallback((folderId: string) => {
-    setEnabledFolders(prev => {
-      const newEnabled = prev.includes(folderId)
+  const toggleFolder = (folderId: string) => {
+    setEnabledFolders(prev => 
+      prev.includes(folderId)
         ? prev.filter(id => id !== folderId)
-        : [...prev, folderId];
-      
-      // Guardar inmediatamente cuando cambia la selección
-      if (user?.id) {
-        saveDriveConfigToStorage(user.id, projectId, newEnabled, selectedDriveFiles);
-      }
-      
-      return newEnabled;
-    });
-  }, [user?.id, projectId, selectedDriveFiles]);
+        : [...prev, folderId]
+    );
+  };
 
-  const toggleDriveFile = useCallback((fileId: string) => {
-    setSelectedDriveFiles(prev => {
-      const newSelected = prev.includes(fileId)
+  const toggleDriveFile = (fileId: string) => {
+    setSelectedDriveFiles(prev => 
+      prev.includes(fileId)
         ? prev.filter(id => id !== fileId)
-        : [...prev, fileId];
-      
-      // Guardar inmediatamente cuando cambia la selección
-      if (user?.id) {
-        saveDriveConfigToStorage(user.id, projectId, enabledFolders, newSelected);
-      }
-      
-      return newSelected;
-    });
-  }, [user?.id, projectId, enabledFolders]);
+        : [...prev, fileId]
+    );
+  };
 
   const handleAddCategory = () => {
     if (newCategoryName.trim() && !categories.find(c => c.label.toLowerCase() === newCategoryName.trim().toLowerCase())) {
@@ -354,7 +395,7 @@ export default function DocumentsTab({
   const allItems = useMemo<Array<Document & { version?: string; isDriveFile?: boolean; driveFolderId?: string }>>(() => {
     const documentItems = documents.map(doc => ({ 
       ...doc, 
-      category: doc.category || 'other' as DocumentCategory 
+      category: doc.category || detectCategory(doc.name || '', doc.type || '', categories) || 'other' as DocumentCategory 
     }));
     
     const scriptItems = scripts.map(script => ({
@@ -369,8 +410,7 @@ export default function DocumentsTab({
     
     const driveItems = driveFiles.map((file) => {
       const savedCat = getSavedCategory(file.id);
-      // No usar detección automática - usar 'other' por defecto para libertad total del usuario
-      const detectedCat = savedCat || 'other';
+      const detectedCat = savedCat || detectCategory(file.name, file.mimeType, categories);
       
       return {
         id: file.id,
@@ -385,7 +425,7 @@ export default function DocumentsTab({
     });
     
     return [...documentItems, ...scriptItems, ...driveItems];
-  }, [documents, scripts, driveFiles, categories, getSavedCategory, categoryUpdateTrigger]);
+  }, [documents, scripts, driveFiles, categories, getSavedCategory]);
 
   // Filtrar por categoría seleccionada (optimizado con useMemo)
   const filteredItems = useMemo(() => {
@@ -403,23 +443,9 @@ export default function DocumentsTab({
       const folderId = enabledFolders.length > 0 ? enabledFolders[0] : undefined;
       const uploadedFile = await uploadDriveFile(accessToken, file, folderId);
       
-      // Guardar la categoría seleccionada para el archivo subido (si el usuario eligió una)
+      // Guardar la categoría seleccionada para el archivo subido
       if (uploadedFile.id) {
         saveCategory(uploadedFile.id, uploadCategory);
-        
-        // Agregar el archivo subido a la lista de archivos seleccionados
-        setSelectedDriveFiles(prev => {
-          const newSelected = prev.includes(uploadedFile.id) 
-            ? prev 
-            : [...prev, uploadedFile.id];
-          
-          // Guardar inmediatamente la configuración actualizada
-          if (user?.id) {
-            saveDriveConfigToStorage(user.id, projectId, enabledFolders, newSelected);
-          }
-          
-          return newSelected;
-        });
       }
       
       await loadAllDriveFiles();
@@ -511,8 +537,7 @@ export default function DocumentsTab({
   // Función para cambiar la categoría de un documento existente
   const handleChangeCategory = useCallback((fileId: string, newCategory: DocumentCategory) => {
     saveCategory(fileId, newCategory);
-    // Forzar actualización del useMemo
-    setCategoryUpdateTrigger(prev => prev + 1);
+    // No es necesario recargar, useMemo actualizará automáticamente
   }, [saveCategory]);
 
   if (loading) {
@@ -742,7 +767,7 @@ export default function DocumentsTab({
             <div className="modal-body">
               <p style={{ marginBottom: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>
                 Select individual files from your Google Drive to display in this project. 
-                You can organize them into any category you want.
+                Files will be automatically categorized based on their name and type.
               </p>
               {loadingFiles && allDriveFiles.length === 0 ? (
                 <p style={{ color: 'var(--text-secondary)' }}>Loading files from Google Drive...</p>
@@ -752,37 +777,52 @@ export default function DocumentsTab({
                 </p>
               ) : (
                 <div className="drive-file-select-list" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                  {allDriveFiles.map(file => (
-                    <label 
-                      key={file.id} 
-                      className="drive-file-checkbox"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        padding: '12px',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        background: selectedDriveFiles.includes(file.id) ? 'var(--golden-overlay)' : 'var(--bg-primary)',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedDriveFiles.includes(file.id)}
-                        onChange={() => toggleDriveFile(file.id)}
-                      />
-                      <File size={16} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{file.name}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                          <span>{formatFileSize(file.size)}</span>
+                  {allDriveFiles.map(file => {
+                    const detectedCategory = detectCategory(file.name, file.mimeType, categories);
+                    const categoryLabel = categories.find(c => c.value === detectedCategory)?.label || detectedCategory;
+                    
+                    return (
+                      <label 
+                        key={file.id} 
+                        className="drive-file-checkbox"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '12px',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          background: selectedDriveFiles.includes(file.id) ? 'var(--golden-overlay)' : 'var(--bg-primary)',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedDriveFiles.includes(file.id)}
+                          onChange={() => toggleDriveFile(file.id)}
+                        />
+                        <File size={16} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{file.name}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span>{formatFileSize(file.size)}</span>
+                            <span>•</span>
+                            <span style={{ 
+                              padding: '2px 6px', 
+                              background: 'var(--bg-secondary)', 
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              color: 'var(--accent)'
+                            }}>
+                              {categoryLabel}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </label>
-                  ))}
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </div>

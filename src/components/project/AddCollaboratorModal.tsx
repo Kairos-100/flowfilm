@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Check } from 'lucide-react';
-import { Collaborator, CollaboratorCategory, TabType } from '../../types';
+import { X, Check, Share2, Copy, CheckCircle } from 'lucide-react';
+import { Collaborator, CollaboratorCategory, TabType, Visitor } from '../../types';
 import SimpleCustomSelect from '../SimpleCustomSelect';
 import { useContacts } from '../../contexts/ContactsContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useGoogleAuth } from '../../contexts/GoogleAuthContext';
 import { getUserStorageKey } from '../../utils/storage';
+import { sendGmailMessage } from '../../services/gmail';
 import './ProjectTabs.css';
 
 const allTabs: { id: TabType; label: string }[] = [
@@ -19,6 +21,8 @@ interface AddCollaboratorModalProps {
   onClose: () => void;
   onAdd: (collaborator: Omit<Collaborator, 'id'>) => void;
   editingCollaborator?: Collaborator | null;
+  projectId?: string;
+  onAddVisitor?: (projectId: string, visitor: Visitor) => void;
 }
 
 const defaultCategoryLabels: Record<CollaboratorCategory, string> = {
@@ -75,10 +79,11 @@ const languageOptions = [
   { code: 'vi', name: 'Vietnamese', flag: '🇻🇳' },
 ];
 
-export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCollaborator }: AddCollaboratorModalProps) {
+export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCollaborator, projectId, onAddVisitor }: AddCollaboratorModalProps) {
   const { user } = useAuth();
   const userId = user?.id || null;
   const { findContactByName, searchContactsByName, addGlobalContact } = useContacts();
+  const { isAuthenticated, accessToken } = useGoogleAuth();
   const [category, setCategory] = useState<string>('coproducers');
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
@@ -86,12 +91,19 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
   const [phone, setPhone] = useState('');
   const [languages, setLanguages] = useState<string[]>([]);
   const [isLanguagesOpen, setIsLanguagesOpen] = useState(false);
+  const [customLanguageInput, setCustomLanguageInput] = useState('');
+  const [showCustomLanguageInput, setShowCustomLanguageInput] = useState(false);
   const [address, setAddress] = useState('');
   const [website, setWebsite] = useState('');
   const [notes, setNotes] = useState('');
+  const [allergies, setAllergies] = useState('');
+  const [hasDrivingLicense, setHasDrivingLicense] = useState(false);
   const [allowedTabs, setAllowedTabs] = useState<TabType[]>([]);
   const [nameSuggestions, setNameSuggestions] = useState<Collaborator[]>([]);
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [sendingInvite, setSendingInvite] = useState(false);
 
   // Cargar opciones personalizadas
   const [categoryLabels, setCategoryLabels] = useState(() => 
@@ -164,6 +176,8 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
       setAddress(editingCollaborator.address || '');
       setWebsite(editingCollaborator.website || '');
       setNotes(editingCollaborator.notes || '');
+      setAllergies(editingCollaborator.allergies || '');
+      setHasDrivingLicense(editingCollaborator.hasDrivingLicense || false);
       setAllowedTabs(editingCollaborator.allowedTabs || []);
     } else if (!editingCollaborator && isOpen) {
       resetForm();
@@ -208,6 +222,8 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
         setAddress(exactMatch.address || '');
         setWebsite(exactMatch.website || '');
         setNotes(exactMatch.notes || '');
+        setAllergies(exactMatch.allergies || '');
+        setHasDrivingLicense(exactMatch.hasDrivingLicense || false);
         if (exactMatch.language) {
           setLanguages(Array.isArray(exactMatch.language) 
             ? exactMatch.language 
@@ -237,6 +253,8 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
           setAddress(contact.address || '');
           setWebsite(contact.website || '');
           setNotes(contact.notes || '');
+          setAllergies(contact.allergies || '');
+          setHasDrivingLicense(contact.hasDrivingLicense || false);
           if (contact.language) {
             setLanguages(Array.isArray(contact.language) 
               ? contact.language 
@@ -270,11 +288,128 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     });
   };
 
+  const handleAddCustomLanguage = () => {
+    const customLang = customLanguageInput.trim();
+    if (customLang && !languages.includes(customLang)) {
+      setLanguages(prev => [...prev, customLang]);
+      setCustomLanguageInput('');
+      setShowCustomLanguageInput(false);
+    }
+  };
+
+  const handleRemoveLanguage = (langCode: string) => {
+    setLanguages(prev => prev.filter(l => l !== langCode));
+  };
+
   const handleToggleTab = (tabId: TabType) => {
     if (allowedTabs.includes(tabId)) {
       setAllowedTabs(allowedTabs.filter((id) => id !== tabId));
     } else {
       setAllowedTabs([...allowedTabs, tabId]);
+    }
+  };
+
+  const generateInviteToken = (): string => {
+    // Generar un token único basado en timestamp y random
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+  };
+
+  const handleInviteCollaborator = async () => {
+    if (!projectId || !email.trim() || allowedTabs.length === 0 || !onAddVisitor) {
+      return;
+    }
+
+    setSendingInvite(true);
+    setLinkCopied(false);
+
+    try {
+      // Generar token único para la invitación
+      const inviteToken = generateInviteToken();
+      
+      // Crear el Visitor
+      const visitor: Visitor = {
+        id: inviteToken,
+        email: email.trim(),
+        name: name.trim(),
+        invitedAt: new Date(),
+        projectId: projectId,
+        allowedTabs: allowedTabs,
+        status: 'pending',
+      };
+
+      // Añadir el visitante
+      onAddVisitor(projectId, visitor);
+
+      // Generar enlace de invitación
+      const inviteUrl = `${window.location.origin}/project/${projectId}?invite=${inviteToken}&email=${encodeURIComponent(email.trim())}`;
+      setInviteLink(inviteUrl);
+
+      // Intentar enviar email si Gmail está conectado
+      if (isAuthenticated && accessToken) {
+        try {
+          const tabsList = allowedTabs.map(tab => {
+            const tabLabels: Record<TabType, string> = {
+              'colaboradores': 'Collaborators',
+              'tareas': 'Tasks',
+              'documentos': 'Documents',
+              'budget': 'Budget',
+            };
+            return tabLabels[tab] || tab;
+          }).join(', ');
+
+          const emailBody = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">You've been invited to collaborate</h2>
+              <p>Hello ${name.trim()},</p>
+              <p>You have been invited to collaborate on this project with access to the following sections:</p>
+              <ul style="list-style-type: none; padding-left: 0;">
+                ${allowedTabs.map(tab => {
+                  const tabLabels: Record<TabType, string> = {
+                    'colaboradores': 'Collaborators',
+                    'tareas': 'Tasks',
+                    'documentos': 'Documents',
+                    'budget': 'Budget',
+                  };
+                  return `<li style="padding: 5px 0;">✓ ${tabLabels[tab] || tab}</li>`;
+                }).join('')}
+              </ul>
+              <div style="margin: 30px 0; text-align: center;">
+                <a href="${inviteUrl}" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Accept Invitation</a>
+              </div>
+              <p style="color: #666; font-size: 12px;">Or copy and paste this link into your browser:</p>
+              <p style="color: #666; font-size: 12px; word-break: break-all;">${inviteUrl}</p>
+            </div>
+          `;
+
+          await sendGmailMessage(
+            accessToken,
+            email.trim(),
+            `Invitation to collaborate on project`,
+            emailBody
+          );
+          
+          setSendingInvite(false);
+          // Mostrar mensaje de éxito
+          alert('¡Invitación enviada por email exitosamente!');
+        } catch (error) {
+          console.error('Error sending email:', error);
+          // Si falla el envío de email, copiar al portapapeles
+          await navigator.clipboard.writeText(inviteUrl);
+          setLinkCopied(true);
+          setSendingInvite(false);
+          alert('No se pudo enviar el email, pero el enlace de invitación ha sido copiado al portapapeles.');
+        }
+      } else {
+        // Si no hay Gmail conectado, copiar al portapapeles
+        await navigator.clipboard.writeText(inviteUrl);
+        setLinkCopied(true);
+        setSendingInvite(false);
+        alert('¡Enlace de invitación copiado al portapapeles! Compártelo con el colaborador.');
+      }
+    } catch (error) {
+      console.error('Error creating invitation:', error);
+      setSendingInvite(false);
+      alert('Error al crear la invitación. Por favor, inténtalo de nuevo.');
     }
   };
 
@@ -295,6 +430,8 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
         address: address.trim() || undefined,
         website: website.trim() || undefined,
         notes: notes.trim() || undefined,
+        allergies: allergies.trim() || undefined,
+        hasDrivingLicense: hasDrivingLicense || undefined,
         isVisitor: isVisitor || undefined,
         allowedTabs: allowedTabs.length > 0 ? allowedTabs : undefined,
       };
@@ -319,10 +456,16 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     setAddress('');
     setWebsite('');
     setNotes('');
+    setAllergies('');
+    setHasDrivingLicense(false);
     setCategory('coproducers');
     setAllowedTabs([]);
     setNameSuggestions([]);
     setShowNameSuggestions(false);
+    setCustomLanguageInput('');
+    setShowCustomLanguageInput(false);
+    setInviteLink(null);
+    setLinkCopied(false);
   };
 
   const handleClose = () => {
@@ -392,6 +535,8 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
                         setAddress(contact.address || '');
                         setWebsite(contact.website || '');
                         setNotes(contact.notes || '');
+                        setAllergies(contact.allergies || '');
+                        setHasDrivingLicense(contact.hasDrivingLicense || false);
                         if (contact.language) {
                           setLanguages(Array.isArray(contact.language) 
                             ? contact.language 
@@ -473,7 +618,7 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
                   {languages.length > 0
                     ? languages.map((langCode) => {
                         const lang = languageOptions.find(l => l.code === langCode);
-                        return lang ? `${lang.flag} ${lang.name}` : '';
+                        return lang ? `${lang.flag} ${lang.name}` : langCode;
                       }).join(', ')
                     : 'Select languages'}
                 </span>
@@ -496,6 +641,68 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
                       </label>
                     ))}
                   </div>
+                  <div className="custom-language-section" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <input
+                        type="text"
+                        value={customLanguageInput}
+                        onChange={(e) => setCustomLanguageInput(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomLanguage();
+                          }
+                        }}
+                        placeholder="Add custom language..."
+                        style={{ flex: 1, padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomLanguage}
+                        disabled={!customLanguageInput.trim()}
+                        style={{ padding: '6px 12px', borderRadius: '4px', border: 'none', background: 'var(--accent)', color: 'white', cursor: customLanguageInput.trim() ? 'pointer' : 'not-allowed' }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {languages.filter(l => !languageOptions.find(lo => lo.code === l)).length > 0 && (
+                      <div style={{ marginTop: '8px' }}>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Custom languages:</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {languages.filter(l => !languageOptions.find(lo => lo.code === l)).map((customLang) => (
+                            <span
+                              key={customLang}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '4px 8px',
+                                background: 'var(--bg-secondary)',
+                                borderRadius: '4px',
+                                fontSize: '12px'
+                              }}
+                            >
+                              {customLang}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLanguage(customLang)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-secondary)',
+                                  padding: '0',
+                                  marginLeft: '4px'
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -515,6 +722,80 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
                 </label>
               ))}
             </div>
+            {projectId && onAddVisitor && allowedTabs.length > 0 && email.trim() && (
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                <button
+                  type="button"
+                  onClick={handleInviteCollaborator}
+                  disabled={sendingInvite || !email.trim() || allowedTabs.length === 0}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 16px',
+                    background: 'var(--accent)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: (sendingInvite || !email.trim() || allowedTabs.length === 0) ? 'not-allowed' : 'pointer',
+                    opacity: (sendingInvite || !email.trim() || allowedTabs.length === 0) ? 0.6 : 1,
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    width: '100%',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {sendingInvite ? (
+                    <>
+                      <span>...</span>
+                      <span>Enviando invitación...</span>
+                    </>
+                  ) : linkCopied ? (
+                    <>
+                      <CheckCircle size={18} />
+                      <span>¡Enlace copiado al portapapeles!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Share2 size={18} />
+                      <span>Invitar / Compartir a la Plataforma</span>
+                    </>
+                  )}
+                </button>
+                {inviteLink && !linkCopied && (
+                  <div style={{ marginTop: '12px', padding: '10px', background: 'var(--bg-secondary)', borderRadius: '6px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Enlace de invitación:</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(inviteLink);
+                          setLinkCopied(true);
+                          setTimeout(() => setLinkCopied(false), 2000);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 8px',
+                          background: 'transparent',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '11px'
+                        }}
+                      >
+                        <Copy size={12} />
+                        Copiar
+                      </button>
+                    </div>
+                    <div style={{ wordBreak: 'break-all', color: 'var(--text-secondary)', fontSize: '11px' }}>
+                      {inviteLink}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="form-group">
@@ -548,6 +829,30 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
               placeholder="Additional information..."
               rows={3}
             />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="allergies">Allergies</label>
+            <input
+              id="allergies"
+              type="text"
+              value={allergies}
+              onChange={(e) => setAllergies(e.target.value)}
+              placeholder="E.g.: Peanuts, Gluten, etc."
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="hasDrivingLicense" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                id="hasDrivingLicense"
+                type="checkbox"
+                checked={hasDrivingLicense}
+                onChange={(e) => setHasDrivingLicense(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              <span>Has Driving License</span>
+            </label>
           </div>
 
           <div className="modal-actions">

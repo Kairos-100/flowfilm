@@ -29,10 +29,12 @@ export interface Collaborator {
   email?: string;
   phone?: string;
   category: CollaboratorCategory;
-  language?: string[]; // Idiomas de comunicación (códigos ISO: ['es', 'en', 'fr', etc.])
+  language?: string[]; // Idiomas de comunicación (códigos ISO: ['es', 'en', 'fr', etc.] o nombres personalizados)
   address?: string; // Para locations y companies
   website?: string;
   notes?: string;
+  allergies?: string; // Alergias del contacto
+  hasDrivingLicense?: boolean; // Indica si tiene carnet de conducir
   isVisitor?: boolean; // Indica si es un visitante
   allowedTabs?: TabType[]; // Pestañas permitidas para visitantes
 }

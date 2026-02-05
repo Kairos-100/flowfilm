@@ -7,6 +7,8 @@ interface ContactsContextType {
   globalContacts: Collaborator[];
   addGlobalContact: (contact: Omit<Collaborator, 'id'>) => void;
   updateGlobalContact: (email: string, updates: Partial<Collaborator>) => void;
+  updateGlobalContactById: (contactId: string, updates: Partial<Collaborator>) => void;
+  removeGlobalContact: (contactId: string) => void;
   findContactByName: (name: string) => Collaborator | undefined;
   searchContactsByName: (query: string) => Collaborator[];
 }
@@ -83,6 +85,20 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const updateGlobalContactById = (contactId: string, updates: Partial<Collaborator>) => {
+    setGlobalContacts(prev =>
+      prev.map(c =>
+        c.id === contactId
+          ? { ...c, ...updates }
+          : c
+      )
+    );
+  };
+
+  const removeGlobalContact = (contactId: string) => {
+    setGlobalContacts(prev => prev.filter(c => c.id !== contactId));
+  };
+
   const findContactByName = (name: string): Collaborator | undefined => {
     return globalContacts.find(
       c => c.name.toLowerCase() === name.toLowerCase().trim()
@@ -103,6 +119,8 @@ export function ContactsProvider({ children }: { children: ReactNode }) {
         globalContacts,
         addGlobalContact,
         updateGlobalContact,
+        updateGlobalContactById,
+        removeGlobalContact,
         findContactByName,
         searchContactsByName,
       }}

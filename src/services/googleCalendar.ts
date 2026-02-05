@@ -8,33 +8,18 @@ export interface CalendarEvent {
   attendees?: Array<{ email: string }>;
 }
 
-export async function listCalendars(accessToken: string) {
-  const response = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || 'Failed to fetch calendars');
-  }
-  
-  const data = await response.json();
-  return data.items || [];
-}
-
-export async function listCalendarEvents(accessToken: string, timeMin?: string, timeMax?: string, calendarId: string = 'primary') {
+export async function listCalendarEvents(accessToken: string, timeMin?: string, timeMax?: string) {
   const params = new URLSearchParams({
+    calendarId: 'primary',
     singleEvents: 'true',
     orderBy: 'startTime',
-    maxResults: '250',
+    maxResults: '250', // Aumentar límite para obtener más eventos
   });
   
   if (timeMin) params.append('timeMin', timeMin);
   if (timeMax) params.append('timeMax', timeMax);
 
-  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`, {
+  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -47,7 +32,7 @@ export async function listCalendarEvents(accessToken: string, timeMin?: string, 
   }
   
   const data = await response.json();
-  console.log(`[Google Calendar API] Received ${data.items?.length || 0} events from ${calendarId}`);
+  console.log(`[Google Calendar API] Received ${data.items?.length || 0} events`);
   return data.items || [];
 }
 
@@ -92,8 +77,8 @@ export async function updateCalendarEvent(accessToken: string, eventId: string, 
   return await response.json();
 }
 
-export async function deleteCalendarEvent(accessToken: string, eventId: string, calendarId: string = 'primary') {
-  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`, {
+export async function deleteCalendarEvent(accessToken: string, eventId: string) {
+  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${accessToken}`,
