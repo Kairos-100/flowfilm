@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Mail, Phone, Globe, Trash2, Edit2, Languages, Users, AlertTriangle, Car } from 'lucide-react';
+import { Plus, Mail, Phone, Globe, Trash2, Edit2, Languages, Users, AlertTriangle, Car, UserPlus } from 'lucide-react';
 import { Collaborator, CollaboratorCategory } from '../types';
 import AddCollaboratorModal from '../components/project/AddCollaboratorModal';
 import { useContacts } from '../contexts/ContactsContext';
@@ -114,7 +114,7 @@ export default function Contacts() {
           <Users size={24} />
           <h1>Contacts</h1>
         </div>
-        <button className="btn-secondary" onClick={() => setIsModalOpen(true)}>
+        <button className="btn-primary contacts-add-button" onClick={() => setIsModalOpen(true)}>
           <Plus size={18} />
           <span>Add Contact</span>
         </button>
@@ -122,9 +122,32 @@ export default function Contacts() {
 
       <div className="tab-content">
         {globalContacts.length === 0 ? (
-          <div className="empty-state">
-            <p>No contacts added yet.</p>
-            <p className="empty-state-subtitle">Add your first contact to get started.</p>
+          <div className="contacts-empty-state">
+            <div className="empty-state-icon-wrapper">
+              <Users size={64} />
+            </div>
+            <h2 className="empty-state-title">No contacts yet</h2>
+            <p className="empty-state-description">
+              Start building your network by adding your first contact. Organize them by category and easily assign them to projects.
+            </p>
+            <button className="btn-primary empty-state-button" onClick={() => setIsModalOpen(true)}>
+              <UserPlus size={20} />
+              <span>Add Your First Contact</span>
+            </button>
+            <div className="empty-state-features">
+              <div className="feature-item">
+                <span className="feature-icon">👥</span>
+                <span>Organize contacts by category</span>
+              </div>
+              <div className="feature-item">
+                <span className="feature-icon">📧</span>
+                <span>Store contact information</span>
+              </div>
+              <div className="feature-item">
+                <span className="feature-icon">🌐</span>
+                <span>Assign contacts to projects</span>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="collaborators-by-category">

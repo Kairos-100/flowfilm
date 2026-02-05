@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Check, Share2, Copy, CheckCircle } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { Collaborator, CollaboratorCategory, TabType, Visitor, Project } from '../../types';
 import SimpleCustomSelect from '../SimpleCustomSelect';
 import { useContacts } from '../../contexts/ContactsContext';
@@ -102,9 +102,6 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
   const [allowedTabs, setAllowedTabs] = useState<TabType[]>([]);
   const [nameSuggestions, setNameSuggestions] = useState<Collaborator[]>([]);
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [sendingInvite, setSendingInvite] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
   // Cargar opciones personalizadas
@@ -303,9 +300,6 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
       return;
     }
 
-    setSendingInvite(true);
-    setLinkCopied(false);
-
     try {
       // Generar token único para la invitación
       const inviteToken = generateInviteToken();
@@ -324,9 +318,16 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
       // Añadir el visitante
       onAddVisitor(projectId, visitor);
 
+      // Guardar información de invitación en sessionStorage para acceso cruzado
+      sessionStorage.setItem(`invite_data_${inviteToken}`, JSON.stringify({
+        email: email.trim(),
+        allowedTabs: allowedTabs,
+        projectId: projectId,
+        name: name.trim(),
+      }));
+
       // Generar enlace de invitación
       const inviteUrl = `${window.location.origin}/project/${projectId}?invite=${inviteToken}&email=${encodeURIComponent(email.trim())}`;
-      setInviteLink(inviteUrl);
 
       // Intentar enviar email si Gmail está conectado
       if (isAuthenticated && accessToken) {
@@ -362,27 +363,21 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
             emailBody
           );
           
-          setSendingInvite(false);
           // Mostrar mensaje de éxito
           alert('¡Invitación enviada por email exitosamente!');
         } catch (error) {
           console.error('Error sending email:', error);
           // Si falla el envío de email, copiar al portapapeles
           await navigator.clipboard.writeText(inviteUrl);
-          setLinkCopied(true);
-          setSendingInvite(false);
           alert('No se pudo enviar el email, pero el enlace de invitación ha sido copiado al portapapeles.');
         }
       } else {
         // Si no hay Gmail conectado, copiar al portapapeles
         await navigator.clipboard.writeText(inviteUrl);
-        setLinkCopied(true);
-        setSendingInvite(false);
         alert('¡Enlace de invitación copiado al portapapeles! Compártelo con el colaborador.');
       }
     } catch (error) {
       console.error('Error creating invitation:', error);
-      setSendingInvite(false);
       alert('Error al crear la invitación. Por favor, inténtalo de nuevo.');
     }
   };
@@ -450,8 +445,6 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
     setNameSuggestions([]);
     setShowNameSuggestions(false);
     setCustomLanguageInput('');
-    setInviteLink(null);
-    setLinkCopied(false);
     setSelectedProjectId('');
   };
 
@@ -717,80 +710,6 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
                 </label>
               ))}
             </div>
-            {projectId && onAddVisitor && allowedTabs.length > 0 && email.trim() && (
-              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
-                <button
-                  type="button"
-                  onClick={handleInviteCollaborator}
-                  disabled={sendingInvite || !email.trim() || allowedTabs.length === 0}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '10px 16px',
-                    background: 'var(--accent)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: (sendingInvite || !email.trim() || allowedTabs.length === 0) ? 'not-allowed' : 'pointer',
-                    opacity: (sendingInvite || !email.trim() || allowedTabs.length === 0) ? 0.6 : 1,
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    width: '100%',
-                    justifyContent: 'center'
-                  }}
-                >
-                  {sendingInvite ? (
-                    <>
-                      <span>...</span>
-                      <span>Enviando invitación...</span>
-                    </>
-                  ) : linkCopied ? (
-                    <>
-                      <CheckCircle size={18} />
-                      <span>¡Enlace copiado al portapapeles!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Share2 size={18} />
-                      <span>Invitar / Compartir a la Plataforma</span>
-                    </>
-                  )}
-                </button>
-                {inviteLink && !linkCopied && (
-                  <div style={{ marginTop: '12px', padding: '10px', background: 'var(--bg-secondary)', borderRadius: '6px', fontSize: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Enlace de invitación:</span>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(inviteLink);
-                          setLinkCopied(true);
-                          setTimeout(() => setLinkCopied(false), 2000);
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '4px 8px',
-                          background: 'transparent',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '11px'
-                        }}
-                      >
-                        <Copy size={12} />
-                        Copiar
-                      </button>
-                    </div>
-                    <div style={{ wordBreak: 'break-all', color: 'var(--text-secondary)', fontSize: '11px' }}>
-                      {inviteLink}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           <div className="form-group">

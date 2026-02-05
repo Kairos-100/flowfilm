@@ -38,9 +38,9 @@ export default function Project() {
     removeTask,
   } = useProjects();
 
-  const project = projects.find((p) => p.id === id);
   const projectVisitors = visitors[id!] || [];
   const [inviteVisitor, setInviteVisitor] = useState<{ allowedTabs: TabType[]; email: string } | null>(null);
+  const [isLoadingInvite, setIsLoadingInvite] = useState(false);
 
   // Manejar parámetros de invitación en la URL
   useEffect(() => {
@@ -48,7 +48,35 @@ export default function Project() {
     const inviteEmail = searchParams.get('email');
 
     if (inviteToken && inviteEmail && id) {
-      // Buscar el visitante en los visitantes del proyecto
+      setIsLoadingInvite(true);
+      
+      // Primero buscar en sessionStorage con clave invite_data_${inviteToken}
+      const inviteDataKey = `invite_data_${inviteToken}`;
+      const storedInviteData = sessionStorage.getItem(inviteDataKey);
+      
+      if (storedInviteData) {
+        try {
+          const inviteData = JSON.parse(storedInviteData);
+          if (inviteData.allowedTabs && inviteData.projectId === id && inviteData.email.toLowerCase() === decodeURIComponent(inviteEmail).toLowerCase()) {
+            setInviteVisitor({
+              allowedTabs: inviteData.allowedTabs,
+              email: inviteData.email,
+            });
+            
+            // Limpiar parámetros de la URL
+            const newSearchParams = new URLSearchParams(searchParams);
+            newSearchParams.delete('invite');
+            newSearchParams.delete('email');
+            window.history.replaceState({}, '', `${window.location.pathname}${newSearchParams.toString() ? '?' + newSearchParams.toString() : ''}`);
+            setIsLoadingInvite(false);
+            return;
+          }
+        } catch (e) {
+          console.error('Error parsing invite data from sessionStorage:', e);
+        }
+      }
+      
+      // Fallback: buscar el visitante en los visitantes del proyecto
       const foundVisitor = projectVisitors.find(
         (v) => v.id === inviteToken && v.email.toLowerCase() === decodeURIComponent(inviteEmail).toLowerCase()
       );
@@ -76,10 +104,11 @@ export default function Project() {
         newSearchParams.delete('email');
         window.history.replaceState({}, '', `${window.location.pathname}${newSearchParams.toString() ? '?' + newSearchParams.toString() : ''}`);
       }
+      setIsLoadingInvite(false);
     } else {
       // Verificar si hay información de invitación guardada en sessionStorage
       const sessionKeys = Object.keys(sessionStorage);
-      const inviteKey = sessionKeys.find(key => key.startsWith(`invite_${id}_`));
+      const inviteKey = sessionKeys.find(key => key.startsWith(`invite_${id}_`) || key.startsWith('invite_data_'));
       if (inviteKey) {
         try {
           const inviteData = JSON.parse(sessionStorage.getItem(inviteKey) || '{}');
@@ -96,6 +125,23 @@ export default function Project() {
     }
   }, [searchParams, id, projectVisitors, updateVisitor]);
 
+  // Buscar proyecto o crear uno temporal si hay invitación válida
+  let project = projects.find((p) => p.id === id);
+  
+  // Si el proyecto no se encuentra pero hay una invitación válida, crear un proyecto temporal
+  if (!project && inviteVisitor && inviteVisitor.allowedTabs.length > 0) {
+    project = {
+      id: id!,
+      title: 'Shared Project',
+      description: 'You have been invited to view this project',
+      status: 'pre-produccion',
+      category: 'originals',
+      subcategory: 'feature-film',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+  }
+
   // Verificar si hay un parámetro de tab en la URL
   useEffect(() => {
     const tabParam = searchParams.get('tab');
@@ -104,10 +150,31 @@ export default function Project() {
     }
   }, [searchParams]);
 
-  if (!project) {
+  // Mostrar carga mientras se procesa la invitación
+  if (isLoadingInvite) {
+    return (
+      <div className="project-not-found">
+        <h2>Loading...</h2>
+      </div>
+    );
+  }
+
+  // Si no se encuentra el proyecto y no hay invitación válida, mostrar "Project not found"
+  if (!project && !inviteVisitor) {
     return (
       <div className="project-not-found">
         <h2>Project not found</h2>
+        <Link to="/">Back to Projects</Link>
+      </div>
+    );
+  }
+
+  // Si hay una invitación pero no hay pestañas permitidas, mostrar "Invalid Invitation"
+  if (inviteVisitor && inviteVisitor.allowedTabs.length === 0) {
+    return (
+      <div className="project-not-found">
+        <h2>Invalid Invitation</h2>
+        <p>This invitation does not grant access to any project sections.</p>
         <Link to="/">Back to Projects</Link>
       </div>
     );
