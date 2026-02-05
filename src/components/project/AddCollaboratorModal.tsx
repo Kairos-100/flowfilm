@@ -347,16 +347,6 @@ export default function AddCollaboratorModal({ isOpen, onClose, onAdd, editingCo
       // Intentar enviar email si Gmail está conectado
       if (isAuthenticated && accessToken) {
         try {
-          const tabsList = allowedTabs.map(tab => {
-            const tabLabels: Record<TabType, string> = {
-              'colaboradores': 'Collaborators',
-              'tareas': 'Tasks',
-              'documentos': 'Documents',
-              'budget': 'Budget',
-            };
-            return tabLabels[tab] || tab;
-          }).join(', ');
-
           const emailBody = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #333;">You've been invited to collaborate</h2>
