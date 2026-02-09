@@ -219,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const resetPassword = async (token: string, newPassword: string): Promise<boolean> => {
+  const resetPassword = async (_token: string, newPassword: string): Promise<boolean> => {
     try {
       const { error } = await supabase.auth.updateUser({
         password: newPassword,

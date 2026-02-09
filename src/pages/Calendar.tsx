@@ -483,7 +483,7 @@ export default function Calendar() {
       loadGoogleEvents();
       
       // Luego sincronizar cada 15 segundos
-      syncIntervalRef.current = setInterval(() => {
+      syncIntervalRef.current = window.setInterval(() => {
         loadGoogleEvents();
       }, 15000); // 15 segundos
 
