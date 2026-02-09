@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../types';
+import { supabase } from '../lib/supabase';
 import { clearUserData } from '../utils/storage';
 
 interface AuthContextType {
@@ -16,141 +17,255 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-
-  // Hash password using Web Crypto API (SHA-256)
-  async function hashPassword(password: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  }
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verificar si hay un usuario guardado en localStorage
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        loadUserProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        loadUserProfile(session.user.id);
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string, companyName?: string): Promise<boolean> => {
-    // Verificar si es un usuario registrado con contraseña válida
-    const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]') as Array<User & { passwordHash?: string }>;
-    const registeredUser = registeredUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (!registeredUser || !registeredUser.passwordHash) {
-      return false;
-    }
-    const givenHash = await hashPassword(password);
-    if (givenHash !== registeredUser.passwordHash) {
-      return false;
-    }
+  const loadUserProfile = async (userId: string) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-    const userToSave: User = {
-      id: registeredUser.id,
-      email: registeredUser.email,
-      name: companyName?.trim() || registeredUser.name,
-      role: registeredUser.role,
-    };
-    
-    // NO establecer isNewUser flag durante login - solo durante registro
-    // El flag isNewUser solo debe existir durante el registro para usuarios nuevos
-    
-    setUser(userToSave);
-    localStorage.setItem('user', JSON.stringify(userToSave));
-    return true;
+      if (error) {
+        console.error('Error loading user profile:', error);
+        setLoading(false);
+        return;
+      }
+
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+
+      if (authUser && profile) {
+        const userData: User = {
+          id: authUser.id,
+          email: authUser.email || '',
+          name: profile.name,
+          role: profile.role as 'admin' | 'member' | 'visitor',
+        };
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const login = async (email: string, password: string, companyName?: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error('Login error:', error);
+        return false;
+      }
+
+      if (!data.user) {
+        return false;
+      }
+
+      if (companyName?.trim()) {
+        await supabase
+          .from('user_profiles')
+          .update({ name: companyName.trim() })
+          .eq('id', data.user.id);
+      }
+
+      await loadUserProfile(data.user.id);
+      return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
+    }
   };
 
   const register = async (email: string, password: string, companyName: string): Promise<boolean> => {
-    // Verificar si el email ya existe
-    const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]') as Array<User & { passwordHash?: string }>;
-    if (registeredUsers.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      return false; // Email ya existe
+    try {
+      console.log('Starting registration for:', email);
+      
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: companyName.trim(),
+            role: 'admin',
+          },
+        },
+      });
+
+      if (error) {
+        console.error('Registration error:', error);
+        if (error.message.includes('already registered') || error.message.includes('already exists')) {
+          return false;
+        }
+        return false;
+      }
+
+      if (!data.user) {
+        console.error('No user returned from registration');
+        return false;
+      }
+
+      console.log('User created:', data.user.id);
+      console.log('Session exists:', !!data.session);
+
+      // Crear el perfil del usuario
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .upsert({
+          id: data.user.id,
+          name: companyName.trim(),
+          role: 'admin',
+        }, {
+          onConflict: 'id'
+        });
+
+      if (profileError) {
+        console.error('Error creating profile:', profileError);
+      } else {
+        console.log('Profile created successfully');
+      }
+
+      clearUserData(data.user.id);
+      localStorage.removeItem(`customCategories_${data.user.id}`);
+      localStorage.removeItem(`customSubcategories_${data.user.id}`);
+      localStorage.removeItem(`customStatuses_${data.user.id}`);
+      localStorage.removeItem(`customCollaboratorCategories_${data.user.id}`);
+      localStorage.removeItem(`calendarEvents_${data.user.id}`);
+      localStorage.setItem(`isNewUser_${data.user.id}`, 'true');
+
+      // Si hay sesión inmediata, cargar perfil
+      if (data.session) {
+        console.log('Session available, loading profile...');
+        await loadUserProfile(data.user.id);
+        return true;
+      }
+
+      // Si no hay sesión, esperar un momento y verificar de nuevo
+      console.log('No session immediately, waiting and checking...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Verificar sesión nuevamente
+      const { data: { session: newSession } } = await supabase.auth.getSession();
+      if (newSession) {
+        console.log('Session found after wait, loading profile...');
+        await loadUserProfile(newSession.user.id);
+        return true;
+      }
+
+      // Si aún no hay sesión, intentar iniciar sesión automáticamente
+      console.log('No session found, attempting auto-login...');
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (loginError) {
+        console.error('Auto-login error:', loginError);
+        return false;
+      }
+
+      if (loginData.user) {
+        console.log('Auto-login successful, loading profile...');
+        await loadUserProfile(loginData.user.id);
+        return true;
+      }
+
+      console.error('Registration completed but no session available');
+      return false;
+    } catch (error) {
+      console.error('Registration error:', error);
+      return false;
     }
-
-    // Crear nuevo usuario
-    const newUser: User = {
-      id: Date.now().toString(),
-      email,
-      name: companyName.trim(),
-      role: 'admin', // Los nuevos usuarios son admin por defecto
-    };
-
-    // Guardar usuario registrado
-    const passwordHash = await hashPassword(password);
-    registeredUsers.push({ ...newUser, passwordHash });
-    localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
-
-    // Limpiar todos los datos del usuario para empezar con lienzo en blanco
-    clearUserData(newUser.id);
-    
-    // También limpiar claves adicionales que puedan existir
-    localStorage.removeItem(`customCategories_${newUser.id}`);
-    localStorage.removeItem(`customSubcategories_${newUser.id}`);
-    localStorage.removeItem(`customStatuses_${newUser.id}`);
-    localStorage.removeItem(`customCollaboratorCategories_${newUser.id}`);
-    localStorage.removeItem(`calendarEvents_${newUser.id}`);
-
-    // Marcar que este usuario empezó con lienzo en blanco
-    localStorage.setItem(`isNewUser_${newUser.id}`, 'true');
-
-    // Iniciar sesión automáticamente
-    setUser(newUser);
-    localStorage.setItem('user', JSON.stringify(newUser));
-
-    return true;
   };
 
   const requestPasswordReset = async (email: string): Promise<{ ok: boolean; token?: string }> => {
-    const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]') as Array<User & { passwordHash?: string }>;
-    const registeredUser = registeredUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    // No revelar si el email existe: siempre devolver ok, pero solo generar token si existe
-    if (!registeredUser) {
+    try {
+      await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      return { ok: true };
+    } catch (error) {
+      console.error('Password reset request error:', error);
       return { ok: true };
     }
-    // Generar token y guardar con expiración (30 min)
-    const token = crypto.randomUUID();
-    const expiresAt = Date.now() + 30 * 60 * 1000;
-    const tokens = JSON.parse(localStorage.getItem('passwordResetTokens') || '[]') as Array<{ email: string; token: string; expiresAt: number }>;
-    // Eliminar tokens anteriores de ese email
-    const filtered = tokens.filter(t => t.email.toLowerCase() !== email.toLowerCase());
-    filtered.push({ email, token, expiresAt });
-    localStorage.setItem('passwordResetTokens', JSON.stringify(filtered));
-    return { ok: true, token };
   };
 
   const resetPassword = async (token: string, newPassword: string): Promise<boolean> => {
-    const tokens = JSON.parse(localStorage.getItem('passwordResetTokens') || '[]') as Array<{ email: string; token: string; expiresAt: number }>;
-    const entry = tokens.find(t => t.token === token);
-    if (!entry || Date.now() > entry.expiresAt) {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        console.error('Password reset error:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Password reset error:', error);
       return false;
     }
-    const registeredUsers = JSON.parse(localStorage.getItem('registeredUsers') || '[]') as Array<User & { passwordHash?: string }>;
-    const idx = registeredUsers.findIndex(u => u.email.toLowerCase() === entry.email.toLowerCase());
-    if (idx === -1) return false;
-    const passwordHash = await hashPassword(newPassword);
-    registeredUsers[idx] = { ...registeredUsers[idx], passwordHash };
-    localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
-    // Eliminar token usado
-    const remaining = tokens.filter(t => t.token !== token);
-    localStorage.setItem('passwordResetTokens', JSON.stringify(remaining));
-    return true;
   };
 
-  const logout = () => {
-    // Limpiar tokens de Google del usuario actual antes de hacer logout
-    if (user?.id) {
-      const tokenKey = `google_access_token_${user.id}`;
-      const expiryKey = `google_token_expiry_${user.id}`;
-      const refreshKey = `google_refresh_token_${user.id}`;
-      localStorage.removeItem(tokenKey);
-      localStorage.removeItem(expiryKey);
-      localStorage.removeItem(refreshKey);
+  const logout = async () => {
+    try {
+      if (user?.id) {
+        localStorage.removeItem(`google_access_token_${user.id}`);
+        localStorage.removeItem(`google_token_expiry_${user.id}`);
+        localStorage.removeItem(`google_refresh_token_${user.id}`);
+      }
+
+      await supabase.auth.signOut();
+      setUser(null);
+      localStorage.removeItem('user');
+    } catch (error) {
+      console.error('Logout error:', error);
     }
-    
-    setUser(null);
-    localStorage.removeItem('user');
   };
+
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px'
+      }}>
+        <div>Cargando...</div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider
