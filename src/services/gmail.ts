@@ -64,7 +64,7 @@ export async function sendGmailMessage(accessToken: string, to: string, subject:
     const result = await response.json();
     console.log('Email sent successfully:', result);
     return result;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error sending email:', error);
     // Re-lanzar el error con más contexto
     if (error.message) {

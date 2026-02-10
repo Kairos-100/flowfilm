@@ -181,7 +181,7 @@ export default function SimpleCustomSelect({
                         } else if (e.key === 'Enter') {
                           e.preventDefault();
                           e.stopPropagation();
-                          handleSaveAdd(e as any);
+                          handleSaveAdd(e);
                         }
                       }}
                     />
@@ -192,7 +192,7 @@ export default function SimpleCustomSelect({
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          handleSaveAdd(e as any);
+                          handleSaveAdd(e);
                         }}
                         disabled={!newName.trim()}
                       >

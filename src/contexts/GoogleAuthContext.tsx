@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { getUserStorageKey } from '../utils/storage';
 
@@ -68,7 +68,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
       setIsAuthenticated(false);
     }
     setLoading(false);
-  }, [userId]);
+  }, [userId, refreshAccessToken]);
 
   useEffect(() => {
     // Manejar callback de OAuth
@@ -79,9 +79,9 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
       // Limpiar la URL
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [userId]);
+  }, [userId, handleCallback]);
 
-  const refreshAccessToken = async (refreshToken: string) => {
+  const refreshAccessToken = useCallback(async (refreshToken: string) => {
     if (!userId) return;
     
     try {
@@ -114,9 +114,9 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
       console.error('Error refreshing token:', error);
       logout();
     }
-  };
+  }, [userId, logout]);
 
-  const handleCallback = async (code: string) => {
+  const handleCallback = useCallback(async (code: string) => {
     try {
       if (!CLIENT_ID) {
         console.error('CLIENT_ID is not defined');
@@ -174,14 +174,14 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error exchanging code for token:', error);
     }
-  };
+  }, [userId]);
 
   const login = () => {
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(SCOPES)}&access_type=offline&prompt=consent`;
     window.location.href = authUrl;
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     if (userId) {
       // Limpiar tokens específicos del usuario
       const tokenKey = getUserStorageKey('google_access_token', userId);
@@ -194,7 +194,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     
     setAccessToken(null);
     setIsAuthenticated(false);
-  };
+  }, [userId]);
 
   return (
     <GoogleAuthContext.Provider value={{ isAuthenticated, accessToken, login, logout, loading }}>

@@ -4,6 +4,7 @@ import { useProjects } from '../contexts/ProjectsContext';
 // Removed unused useAuth import
 import { useGoogleAuth } from '../contexts/GoogleAuthContext';
 import { sendGmailMessage } from '../services/gmail';
+import { Project } from '../types';
 import './Gmail.css';
 
 export default function Gmail() {
@@ -17,9 +18,9 @@ export default function Gmail() {
         await sendGmailMessage(accessToken, to, subject, body);
         alert('Email sent successfully!');
         setIsComposing(false);
-      } catch (error: any) {
+      } catch (error) {
         console.error('Error sending email:', error);
-        alert(`Failed to send email: ${error.message || 'Please try again.'}`);
+        alert(`Failed to send email: ${error instanceof Error ? error.message : 'Please try again.'}`);
       }
     } else {
       alert('Please connect your Gmail account first.');
@@ -122,7 +123,7 @@ export default function Gmail() {
 }
 
 interface ComposeEmailProps {
-  projects: any[];
+  projects: Project[];
   onSend: (to: string, subject: string, body: string, projectId?: string) => void;
   onCancel: () => void;
 }

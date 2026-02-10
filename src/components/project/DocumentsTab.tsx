@@ -333,7 +333,7 @@ export default function DocumentsTab({
       await loadAllDriveFiles();
     }
     loadDriveFiles();
-  }, [user?.id, projectId, enabledFolders, selectedDriveFiles]);
+  }, [user?.id, projectId, enabledFolders, selectedDriveFiles, loadAllDriveFiles, loadDriveFiles]);
 
   const handleSaveFolderConfig = useCallback(() => {
     saveDriveConfig(() => setShowFolderConfig(false));
@@ -527,9 +527,9 @@ export default function DocumentsTab({
       
       // Mensaje de confirmación
       console.log(`Archivo "${fileToDelete.name}" eliminado del proyecto exitosamente.`);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error removing file from project:', error);
-      const errorMessage = error?.message || 'Error al eliminar el archivo del proyecto.';
+      const errorMessage = error instanceof Error ? error.message : 'Error al eliminar el archivo del proyecto.';
       alert(`Error: ${errorMessage}\n\nPor favor, intenta nuevamente.`);
     }
   };
@@ -979,7 +979,7 @@ export default function DocumentsTab({
       {filteredItems.length > 0 && (
         <div className="documents-list">
           {filteredItems.map((document) => {
-            const isDriveFile = (document as any).isDriveFile;
+            const isDriveFile = document.isDriveFile;
             const driveFile = isDriveFile ? driveFiles.find(f => f.id === document.id) : null;
             const isScript = document.category === 'script';
             

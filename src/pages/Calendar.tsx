@@ -327,7 +327,7 @@ function EventModal({ isOpen, onClose, onSave, editingEvent, selectedDate, event
             <label>Project (optional)</label>
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
               <option value="">No project</option>
-              {projects.map((project: any) => (
+              {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.title}
                 </option>

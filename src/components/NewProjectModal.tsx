@@ -49,7 +49,9 @@ const loadCustomOptions = (key: string, defaults: Record<string, string>, userId
       // Si hay algo guardado, usar solo eso (sin mezclar con defaults)
       return custom;
     }
-  } catch {}
+  } catch {
+    // Ignore parse errors, fall back to defaults
+  }
   // Si no hay nada guardado, usar los defaults y guardarlos
   if (userId) {
     localStorage.setItem(getUserStorageKey(key, userId), JSON.stringify(defaults));
@@ -195,7 +197,7 @@ export default function NewProjectModal({
     const newLabels = { ...statusLabels, [value]: label };
     setStatusLabels(newLabels);
     saveCustomOptions('customStatuses', newLabels, userId);
-    setStatus(value as any);
+    setStatus(value);
   };
 
   const handleDeleteStatus = (value: string) => {

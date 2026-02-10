@@ -35,7 +35,9 @@ const loadCustomOptions = (key: string, defaults: Record<string, string>, userId
       const custom = JSON.parse(saved);
       return custom;
     }
-  } catch {}
+  } catch {
+    // Ignore parse errors, fall back to defaults
+  }
   return defaults;
 };
 

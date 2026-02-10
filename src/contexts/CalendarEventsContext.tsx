@@ -41,7 +41,7 @@ export function CalendarEventsProvider({ children }: { children: ReactNode }) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setLocalEvents(parsed.map((e: any) => ({
+        setLocalEvents(parsed.map((e: Partial<CalendarEvent> & { date: string | Date }) => ({
           ...e,
           date: new Date(e.date),
         })));

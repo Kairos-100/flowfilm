@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { Festival, FestivalRegion } from '../types';
 import { festivalTemplates, createFestivalFromTemplate, generateFestivalsForYears } from '../data/festivalTemplates';
 import { useAuth } from './AuthContext';
@@ -37,7 +37,7 @@ export function FestivalsProvider({ children }: { children: ReactNode }) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setFestivals(parsed.map((f: any) => ({
+        setFestivals(parsed.map((f: Partial<Festival> & { filmSubmissionDeadline: string | Date; producersHubDeadline: string | Date; festivalStartDate: string | Date; festivalEndDate: string | Date }) => ({
           ...f,
           filmSubmissionDeadline: new Date(f.filmSubmissionDeadline),
           producersHubDeadline: new Date(f.producersHubDeadline),
@@ -112,7 +112,7 @@ export function FestivalsProvider({ children }: { children: ReactNode }) {
     return festivals.filter(f => f.year === year);
   };
 
-  const updateFestivalsForNewYear = () => {
+  const updateFestivalsForNewYear = useCallback(() => {
     setFestivals(currentFestivals => {
       const currentYear = new Date().getFullYear();
       const today = new Date();
@@ -171,7 +171,7 @@ export function FestivalsProvider({ children }: { children: ReactNode }) {
       
       return updatedFestivals;
     });
-  };
+  }, []);
 
   // Verificar y actualizar festivales al inicio del año
   useEffect(() => {
@@ -182,7 +182,7 @@ export function FestivalsProvider({ children }: { children: ReactNode }) {
       updateFestivalsForNewYear();
       localStorage.setItem('lastFestivalUpdateYear', currentYear.toString());
     }
-  }, []);
+  }, [updateFestivalsForNewYear]);
 
   // Verificar y actualizar festivales vencidos periódicamente
   useEffect(() => {
@@ -202,7 +202,7 @@ export function FestivalsProvider({ children }: { children: ReactNode }) {
       clearTimeout(initialCheck);
       clearInterval(interval);
     };
-  }, []); // Sin dependencias para evitar re-ejecuciones innecesarias
+  }, [updateFestivalsForNewYear]); // Sin dependencias para evitar re-ejecuciones innecesarias
 
   return (
     <FestivalsContext.Provider

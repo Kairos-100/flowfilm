@@ -63,7 +63,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     if (savedProjects) {
       try {
         const parsed = JSON.parse(savedProjects);
-        setProjects(parsed.map((p: any) => ({
+        setProjects(parsed.map((p: Partial<Project> & { createdAt: string | Date; updatedAt: string | Date }) => ({
           ...p,
           category: p.category || 'originals',
           subcategory: p.subcategory || 'feature-film',
@@ -83,7 +83,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       try {
         const parsed = JSON.parse(savedCollaborators);
         setCollaborators(Object.keys(parsed).reduce((acc, key) => {
-          acc[key] = parsed[key].map((c: any) => ({
+          acc[key] = parsed[key].map((c: Partial<Collaborator>) => ({
             ...c,
             category: c.category || 'studios',
           }));
@@ -116,7 +116,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       try {
         const parsed = JSON.parse(savedScripts);
         setScripts(Object.keys(parsed).reduce((acc, key) => {
-          acc[key] = parsed[key].map((s: any) => ({
+          acc[key] = parsed[key].map((s: Partial<Script> & { lastModified: string | Date }) => ({
             ...s,
             lastModified: new Date(s.lastModified),
           }));
@@ -136,7 +136,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       try {
         const parsed = JSON.parse(savedDocuments);
         setDocuments(Object.keys(parsed).reduce((acc, key) => {
-          acc[key] = parsed[key].map((d: any) => ({
+          acc[key] = parsed[key].map((d: Partial<Document> & { uploadedAt: string | Date }) => ({
             ...d,
             uploadedAt: new Date(d.uploadedAt),
           }));
@@ -169,7 +169,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       try {
         const parsed = JSON.parse(savedVisitors);
         setVisitors(Object.keys(parsed).reduce((acc, key) => {
-          acc[key] = parsed[key].map((v: any) => ({
+          acc[key] = parsed[key].map((v: Partial<Visitor> & { invitedAt: string | Date }) => ({
             ...v,
             invitedAt: new Date(v.invitedAt),
           }));
@@ -189,7 +189,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       try {
         const parsed = JSON.parse(savedTasks);
         setTasks(Object.keys(parsed).reduce((acc, key) => {
-          acc[key] = parsed[key].map((t: any) => ({
+          acc[key] = parsed[key].map((t: Partial<Task> & { startDate: string | Date; endDate: string | Date; assignedTo?: string | string[] }) => ({
             ...t,
             startDate: new Date(t.startDate),
             endDate: new Date(t.endDate),

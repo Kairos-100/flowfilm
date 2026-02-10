@@ -296,13 +296,11 @@ export default function TasksTab({
                     <div className="assigned-info">
                       <User size={14} />
                       <span>
-                        {Array.isArray(task.assignedTo) 
-                          ? task.assignedTo.length === 0
-                            ? 'Unassigned'
-                            : task.assignedTo.length === 1
-                            ? getCollaboratorName(task.assignedTo[0])
-                            : `${task.assignedTo.length} collaborators`
-                          : getCollaboratorName(task.assignedTo as any)
+                        {task.assignedTo.length === 0
+                          ? 'Unassigned'
+                          : task.assignedTo.length === 1
+                          ? getCollaboratorName(task.assignedTo[0])
+                          : `${task.assignedTo.length} collaborators`
                         }
                       </span>
                     </div>
