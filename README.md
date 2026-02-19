@@ -1,4 +1,4 @@
-# Seagull Films - Plataforma de Gestión de Proyectos
+#- Plataforma de Gestión de Proyectos
 
 Plataforma de gestión al estilo Notion para productoras de cine, diseñada para gestionar proyectos cinematográficos de manera eficiente.
 
