@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 import { getUserStorageKey } from '../utils/storage';
 
@@ -30,66 +30,25 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     'https://www.googleapis.com/auth/drive.file',
   ].join(' ');
 
-  useEffect(() => {
-    if (!userId) {
-      // Si no hay usuario, limpiar tokens y desautenticar
-      setAccessToken(null);
-      setIsAuthenticated(false);
-      setLoading(false);
-      return;
+  const logout = () => {
+    if (userId) {
+      const tokenKey = getUserStorageKey('google_access_token', userId);
+      const expiryKey = getUserStorageKey('google_token_expiry', userId);
+      const refreshKey = getUserStorageKey('google_refresh_token', userId);
+      localStorage.removeItem(tokenKey);
+      localStorage.removeItem(expiryKey);
+      localStorage.removeItem(refreshKey);
     }
+    setAccessToken(null);
+    setIsAuthenticated(false);
+  };
 
-    // Verificar si hay token guardado para este usuario específico
-    const tokenKey = getUserStorageKey('google_access_token', userId);
-    const expiryKey = getUserStorageKey('google_token_expiry', userId);
-    const refreshKey = getUserStorageKey('google_refresh_token', userId);
-    
-    const savedToken = localStorage.getItem(tokenKey);
-    const savedExpiry = localStorage.getItem(expiryKey);
-    
-    if (savedToken && savedExpiry) {
-      const expiryTime = parseInt(savedExpiry);
-      if (Date.now() < expiryTime) {
-        setAccessToken(savedToken);
-        setIsAuthenticated(true);
-      } else {
-        // Token expirado, intentar refrescar
-        const refreshToken = localStorage.getItem(refreshKey);
-        if (refreshToken) {
-          refreshAccessToken(refreshToken);
-        } else {
-          localStorage.removeItem(tokenKey);
-          localStorage.removeItem(expiryKey);
-        }
-      }
-    } else {
-      // No hay token para este usuario, asegurar que está desautenticado
-      setAccessToken(null);
-      setIsAuthenticated(false);
-    }
-    setLoading(false);
-  }, [userId, refreshAccessToken]);
-
-  useEffect(() => {
-    // Manejar callback de OAuth
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    if (code && userId) {
-      handleCallback(code);
-      // Limpiar la URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, [userId, handleCallback]);
-
-  const refreshAccessToken = useCallback(async (refreshToken: string) => {
+  const refreshAccessToken = async (refreshToken: string) => {
     if (!userId) return;
-    
     try {
       const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           client_id: CLIENT_ID,
           client_secret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET,
@@ -97,14 +56,11 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
           grant_type: 'refresh_token',
         }),
       });
-
       const data = await response.json();
       if (data.access_token) {
         const expiryTime = Date.now() + (data.expires_in * 1000);
         setAccessToken(data.access_token);
         setIsAuthenticated(true);
-        
-        // Guardar con clave específica del usuario
         const tokenKey = getUserStorageKey('google_access_token', userId);
         const expiryKey = getUserStorageKey('google_token_expiry', userId);
         localStorage.setItem(tokenKey, data.access_token);
@@ -114,26 +70,22 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
       console.error('Error refreshing token:', error);
       logout();
     }
-  }, [userId, logout]);
+  };
 
-  const handleCallback = useCallback(async (code: string) => {
+  const handleCallback = async (code: string) => {
     try {
       if (!CLIENT_ID) {
         console.error('CLIENT_ID is not defined');
         return;
       }
-
       const clientSecret = import.meta.env.VITE_GOOGLE_CLIENT_SECRET;
       if (!clientSecret) {
         console.error('CLIENT_SECRET is not defined');
         return;
       }
-
       const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           client_id: CLIENT_ID,
           client_secret: clientSecret,
@@ -142,9 +94,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
           redirect_uri: REDIRECT_URI,
         }),
       });
-
       const data = await response.json();
-      
       if (!response.ok) {
         console.error('Error exchanging code:', data);
         if (data.error === 'invalid_client') {
@@ -152,18 +102,14 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-
       if (data.access_token && userId) {
         const expiryTime = Date.now() + (data.expires_in * 1000);
         setAccessToken(data.access_token);
         setIsAuthenticated(true);
-        
-        // Guardar con clave específica del usuario
         const tokenKey = getUserStorageKey('google_access_token', userId);
         const expiryKey = getUserStorageKey('google_token_expiry', userId);
         localStorage.setItem(tokenKey, data.access_token);
         localStorage.setItem(expiryKey, expiryTime.toString());
-        
         if (data.refresh_token) {
           const refreshKey = getUserStorageKey('google_refresh_token', userId);
           localStorage.setItem(refreshKey, data.refresh_token);
@@ -174,27 +120,54 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error exchanging code for token:', error);
     }
+  };
+
+  useEffect(() => {
+    if (!userId) {
+      setAccessToken(null);
+      setIsAuthenticated(false);
+      setLoading(false);
+      return;
+    }
+    const tokenKey = getUserStorageKey('google_access_token', userId);
+    const expiryKey = getUserStorageKey('google_token_expiry', userId);
+    const refreshKey = getUserStorageKey('google_refresh_token', userId);
+    const savedToken = localStorage.getItem(tokenKey);
+    const savedExpiry = localStorage.getItem(expiryKey);
+    if (savedToken && savedExpiry) {
+      const expiryTime = parseInt(savedExpiry);
+      if (Date.now() < expiryTime) {
+        setAccessToken(savedToken);
+        setIsAuthenticated(true);
+      } else {
+        const refreshToken = localStorage.getItem(refreshKey);
+        if (refreshToken) {
+          refreshAccessToken(refreshToken);
+        } else {
+          localStorage.removeItem(tokenKey);
+          localStorage.removeItem(expiryKey);
+        }
+      }
+    } else {
+      setAccessToken(null);
+      setIsAuthenticated(false);
+    }
+    setLoading(false);
+  }, [userId]);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    if (code && userId) {
+      handleCallback(code);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, [userId]);
 
   const login = () => {
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(SCOPES)}&access_type=offline&prompt=consent`;
     window.location.href = authUrl;
   };
-
-  const logout = useCallback(() => {
-    if (userId) {
-      // Limpiar tokens específicos del usuario
-      const tokenKey = getUserStorageKey('google_access_token', userId);
-      const expiryKey = getUserStorageKey('google_token_expiry', userId);
-      const refreshKey = getUserStorageKey('google_refresh_token', userId);
-      localStorage.removeItem(tokenKey);
-      localStorage.removeItem(expiryKey);
-      localStorage.removeItem(refreshKey);
-    }
-    
-    setAccessToken(null);
-    setIsAuthenticated(false);
-  }, [userId]);
 
   return (
     <GoogleAuthContext.Provider value={{ isAuthenticated, accessToken, login, logout, loading }}>
