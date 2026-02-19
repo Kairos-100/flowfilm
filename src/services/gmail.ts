@@ -66,8 +66,7 @@ export async function sendGmailMessage(accessToken: string, to: string, subject:
     return result;
   } catch (error) {
     console.error('Error sending email:', error);
-    // Re-lanzar el error con más contexto
-    if (error.message) {
+    if (error instanceof Error) {
       throw error;
     }
     throw new Error('Failed to send email. Please check your connection and try again.');
