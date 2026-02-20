@@ -9,8 +9,6 @@ import ProjectCardMenu from '../components/ProjectCardMenu';
 import { useState, useMemo } from 'react';
 import './Home.css';
 
-// Removed unused statusColors and statusLabels constants
-
 const defaultCategoryLabels: Record<string, string> = {
   'originals': 'Originals',
   'co-productions': 'Co-productions',
@@ -58,14 +56,20 @@ export default function Home() {
     [userId]
   );
 
-  const handleCreateProject = (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newProject: Project = {
-      ...projectData,
-      id: Date.now().toString(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    addProject(newProject);
+  const handleCreateProject = async (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const newProject: Project = {
+        ...projectData,
+        id: Date.now().toString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await addProject(newProject);
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Error creating project:', error);
+      alert('Error al crear el proyecto. Por favor, intenta de nuevo.');
+    }
   };
 
   const handleEditProject = (project: Project) => {
@@ -73,13 +77,27 @@ export default function Home() {
     setIsModalOpen(true);
   };
 
-  const handleUpdateProject = (project: Project) => {
-    updateProject(project.id, project);
-    setEditingProject(null);
+  const handleUpdateProject = async (project: Project) => {
+    try {
+      await updateProject(project.id, project);
+      setEditingProject(null);
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Error updating project:', error);
+      alert('Error al actualizar el proyecto. Por favor, intenta de nuevo.');
+    }
   };
 
-  const handleDeleteProject = (projectId: string) => {
-    removeProject(projectId);
+  const handleDeleteProject = async (projectId: string) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar este proyecto?')) {
+      return;
+    }
+    try {
+      await removeProject(projectId);
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      alert('Error al eliminar el proyecto. Por favor, intenta de nuevo.');
+    }
   };
 
   const handleCloseModal = () => {

@@ -10,10 +10,10 @@ import './ProjectTabs.css';
 interface TasksTabProps {
   tasks: Task[];
   collaborators: Collaborator[];
-  projectId: string; // Agregar projectId para obtener el proyecto
-  onAddTask: (task: Omit<Task, 'id'>) => void;
-  onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
-  onRemoveTask: (taskId: string) => void;
+  projectId: string;
+  onAddTask: (task: Omit<Task, 'id'>) => Promise<void> | void;
+  onUpdateTask: (taskId: string, updates: Partial<Task>) => Promise<void> | void;
+  onRemoveTask: (taskId: string) => Promise<void> | void;
 }
 
 const statusLabels = {
@@ -99,24 +99,29 @@ export default function TasksTab({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.description && formData.assignedTo.length > 0 && formData.startDate && formData.endDate) {
-      const taskData = {
-        description: formData.description,
-        assignedTo: formData.assignedTo,
-        startDate: new Date(formData.startDate),
-        endDate: new Date(formData.endDate),
-        status: formData.status,
-        projectId: projectId,
-      };
+      try {
+        const taskData = {
+          description: formData.description,
+          assignedTo: formData.assignedTo,
+          startDate: new Date(formData.startDate),
+          endDate: new Date(formData.endDate),
+          status: formData.status,
+          projectId: projectId,
+        };
 
-      if (editingTask) {
-        onUpdateTask(editingTask, taskData);
-        setEditingTask(null);
-      } else {
-        onAddTask(taskData);
-        // Enviar email a los colaboradores asignados solo al crear
-        await sendTaskEmails(taskData);
+        if (editingTask) {
+          await onUpdateTask(editingTask, taskData);
+          setEditingTask(null);
+        } else {
+          await onAddTask(taskData);
+          // Enviar email a los colaboradores asignados solo al crear
+          await sendTaskEmails(taskData);
+        }
+        resetForm();
+      } catch (error) {
+        console.error('Error saving task:', error);
+        alert('Error al guardar la tarea. Por favor, intenta de nuevo.');
       }
-      resetForm();
     }
   };
 
@@ -157,8 +162,6 @@ export default function TasksTab({
     });
   };
 
-  // Ordenar tareas por fecha de vencimiento (endDate) - las más urgentes primero
-  // Eliminar duplicados por ID
   const sortedTasks = [...tasks]
     .filter((task, index, self) => 
       index === self.findIndex((t) => t.id === task.id)
@@ -339,7 +342,16 @@ export default function TasksTab({
                     </button>
                     <button
                       className="action-button danger"
-                      onClick={() => onRemoveTask(task.id)}
+                      onClick={async () => {
+                        if (confirm('¿Estás seguro de que quieres eliminar esta tarea?')) {
+                          try {
+                            await onRemoveTask(task.id);
+                          } catch (error) {
+                            console.error('Error removing task:', error);
+                            alert('Error al eliminar la tarea. Por favor, intenta de nuevo.');
+                          }
+                        }
+                      }}
                       title="Delete"
                     >
                       <Trash2 size={16} />

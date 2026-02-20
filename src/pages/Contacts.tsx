@@ -76,17 +76,27 @@ export default function Contacts() {
     return globalContacts.filter(c => c.isVisitor);
   }, [globalContacts]);
 
-  const handleAdd = (contact: Omit<Collaborator, 'id'>) => {
-    addGlobalContact(contact);
-    setIsModalOpen(false);
+  const handleAdd = async (contact: Omit<Collaborator, 'id'>) => {
+    try {
+      await addGlobalContact(contact);
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Error adding contact:', error);
+      alert('Error al agregar el contacto. Por favor, intenta de nuevo.');
+    }
   };
 
-  const handleAddToProject = (projectId: string, collaborator: Omit<Collaborator, 'id'>) => {
-    const collaboratorWithId: Collaborator = {
-      ...collaborator,
-      id: Date.now().toString(),
-    };
-    addCollaborator(projectId, collaboratorWithId);
+  const handleAddToProject = async (projectId: string, collaborator: Omit<Collaborator, 'id'>) => {
+    try {
+      const collaboratorWithId: Collaborator = {
+        ...collaborator,
+        id: Date.now().toString(),
+      };
+      await addCollaborator(projectId, collaboratorWithId);
+    } catch (error) {
+      console.error('Error adding collaborator to project:', error);
+      alert('Error al agregar el colaborador al proyecto. Por favor, intenta de nuevo.');
+    }
   };
 
   const handleEdit = (contact: Collaborator) => {
@@ -94,11 +104,16 @@ export default function Contacts() {
     setIsModalOpen(true);
   };
 
-  const handleUpdate = (contact: Omit<Collaborator, 'id'>) => {
+  const handleUpdate = async (contact: Omit<Collaborator, 'id'>) => {
     if (editingContact) {
-      updateGlobalContactById(editingContact.id, contact);
-      setEditingContact(null);
-      setIsModalOpen(false);
+      try {
+        await updateGlobalContactById(editingContact.id, contact);
+        setEditingContact(null);
+        setIsModalOpen(false);
+      } catch (error) {
+        console.error('Error updating contact:', error);
+        alert('Error al actualizar el contacto. Por favor, intenta de nuevo.');
+      }
     }
   };
 
@@ -247,7 +262,16 @@ export default function Contacts() {
                           </button>
                           <button
                             className="action-button danger"
-                            onClick={() => removeGlobalContact(contact.id)}
+                            onClick={async () => {
+                              if (confirm('¿Estás seguro de que quieres eliminar este contacto?')) {
+                                try {
+                                  await removeGlobalContact(contact.id);
+                                } catch (error) {
+                                  console.error('Error removing contact:', error);
+                                  alert('Error al eliminar el contacto. Por favor, intenta de nuevo.');
+                                }
+                              }
+                            }}
                             title="Delete"
                           >
                             <Trash2 size={16} />
@@ -314,7 +338,16 @@ export default function Contacts() {
                     </button>
                     <button
                       className="action-button danger"
-                      onClick={() => removeGlobalContact(visitor.id)}
+                      onClick={async () => {
+                        if (confirm('¿Estás seguro de que quieres eliminar este visitante?')) {
+                          try {
+                            await removeGlobalContact(visitor.id);
+                          } catch (error) {
+                            console.error('Error removing visitor:', error);
+                            alert('Error al eliminar el visitante. Por favor, intenta de nuevo.');
+                          }
+                        }
+                      }}
                       title="Delete"
                     >
                       <Trash2 size={16} />

@@ -11,7 +11,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useProjects } from '../contexts/ProjectsContext';
 import './Project.css';
 
-// Constantes
 const ALL_TABS: { id: TabType; label: string }[] = [
   { id: 'colaboradores', label: 'Collaborators' },
   { id: 'tareas', label: 'Tasks' },
@@ -21,7 +20,6 @@ const ALL_TABS: { id: TabType; label: string }[] = [
 
 const VALID_TABS: TabType[] = ['colaboradores', 'budget', 'documentos', 'tareas'];
 
-// Función auxiliar para limpiar parámetros de URL
 const cleanUrlParams = (searchParams: URLSearchParams) => {
   const newSearchParams = new URLSearchParams(searchParams);
   newSearchParams.delete('invite');
@@ -30,7 +28,6 @@ const cleanUrlParams = (searchParams: URLSearchParams) => {
   window.history.replaceState({}, '', `${window.location.pathname}${queryString ? '?' + queryString : ''}`);
 };
 
-// Función auxiliar para crear proyecto temporal
 const createTemporaryProject = (id: string) => ({
   id,
   title: 'Shared Project',
@@ -72,7 +69,6 @@ export default function Project() {
   const [inviteVisitor, setInviteVisitor] = useState<{ allowedTabs: TabType[]; email: string } | null>(null);
   const [isLoadingInvite, setIsLoadingInvite] = useState(false);
 
-  // Función auxiliar para procesar invitación desde sessionStorage
   const processInviteFromStorage = useCallback((inviteToken: string, inviteEmail: string, projectId: string) => {
     const inviteDataKey = `invite_data_${inviteToken}`;
     const storedInviteData = sessionStorage.getItem(inviteDataKey);
@@ -97,9 +93,7 @@ export default function Project() {
     return false;
   }, [searchParams]);
 
-  // Manejar parámetros de invitación en la URL
   useEffect(() => {
-    // Si el usuario es admin o member, limpiar cualquier estado de invitación y salir
     if (user && (user.role === 'admin' || user.role === 'member')) {
       if (inviteVisitor !== null) {
         setInviteVisitor(null);
@@ -111,8 +105,6 @@ export default function Project() {
     const inviteEmail = searchParams.get('email');
 
     if (!inviteToken || !inviteEmail || !id) {
-      // Verificar si hay información de invitación guardada en sessionStorage
-      // Solo aplicar si el usuario es visitor y el email coincide
       const sessionKeys = Object.keys(sessionStorage);
       const inviteKey = sessionKeys.find(key => 
         key.startsWith(`invite_${id}_`) || key.startsWith('invite_data_')
@@ -137,13 +129,11 @@ export default function Project() {
 
     setIsLoadingInvite(true);
     
-    // Primero buscar en sessionStorage
     if (processInviteFromStorage(inviteToken, inviteEmail, id)) {
       setIsLoadingInvite(false);
       return;
     }
     
-    // Fallback: buscar el visitante en los visitantes del proyecto
     const foundVisitor = projectVisitors.find(
       (v) => v.id === inviteToken && v.email.toLowerCase() === decodeURIComponent(inviteEmail).toLowerCase()
     );
@@ -156,10 +146,8 @@ export default function Project() {
         projectId: id,
       }));
 
-      // Actualizar estado del visitante a 'accepted'
       updateVisitor(id, inviteToken, { status: 'accepted' });
 
-      // Guardar información del visitante en el estado
       setInviteVisitor({
         allowedTabs: foundVisitor.allowedTabs,
         email: foundVisitor.email,
@@ -171,7 +159,6 @@ export default function Project() {
     setIsLoadingInvite(false);
   }, [searchParams, id, projectVisitors, updateVisitor, processInviteFromStorage, user, inviteVisitor]);
 
-  // Buscar proyecto o crear uno temporal si hay invitación válida
   const project = useMemo(() => {
     const foundProject = projects.find((p) => p.id === id);
     
@@ -190,9 +177,7 @@ export default function Project() {
     }
   }, [searchParams]);
 
-  // Calcular permisos de visitante
   const visitorPermissions = useMemo(() => {
-    // Si el usuario es admin o member, nunca es visitante
     if (user && (user.role === 'admin' || user.role === 'member')) {
       return { isVisitor: false, allowedTabs: [] as TabType[], visitor: null };
     }
@@ -217,7 +202,6 @@ export default function Project() {
     return { isVisitor, allowedTabs, visitor };
   }, [user, inviteVisitor, projectVisitors]);
 
-  // Si es visitante y la pestaña activa no está permitida, cambiar a la primera permitida
   useEffect(() => {
     if (visitorPermissions.isVisitor && 
         visitorPermissions.allowedTabs.length > 0 && 
@@ -229,33 +213,45 @@ export default function Project() {
   const hasAccess = !visitorPermissions.isVisitor || 
     (visitorPermissions.allowedTabs.length > 0 && visitorPermissions.allowedTabs.includes(activeTab));
 
-  // Filtrar pestañas según permisos
   const tabs = useMemo(() => {
     return visitorPermissions.isVisitor && visitorPermissions.allowedTabs.length > 0
       ? ALL_TABS.filter((tab) => visitorPermissions.allowedTabs.includes(tab.id))
       : ALL_TABS;
   }, [visitorPermissions]);
 
-  // Handlers optimizados
-  const handleAddCollaborator = useCallback((collab: Omit<import('../types').Collaborator, 'id'>) => {
+  const handleAddCollaborator = useCallback(async (collab: Omit<import('../types').Collaborator, 'id'>) => {
     if (id) {
-      addCollaborator(id, { ...collab, id: Date.now().toString() });
+      try {
+        await addCollaborator(id, { ...collab, id: Date.now().toString() });
+      } catch (error) {
+        console.error('Error adding collaborator:', error);
+        alert('Error al agregar el colaborador. Por favor, intenta de nuevo.');
+      }
     }
   }, [id, addCollaborator]);
 
-  const handleAddBudgetItem = useCallback((item: Omit<import('../types').BudgetItem, 'id'>) => {
+  const handleAddBudgetItem = useCallback(async (item: Omit<import('../types').BudgetItem, 'id'>) => {
     if (id) {
-      addBudgetItem(id, { ...item, id: Date.now().toString() });
+      try {
+        await addBudgetItem(id, { ...item, id: Date.now().toString() });
+      } catch (error) {
+        console.error('Error adding budget item:', error);
+        alert('Error al agregar el item de presupuesto. Por favor, intenta de nuevo.');
+      }
     }
   }, [id, addBudgetItem]);
 
-  const handleAddTask = useCallback((taskData: Omit<import('../types').Task, 'id' | 'projectId'>) => {
+  const handleAddTask = useCallback(async (taskData: Omit<import('../types').Task, 'id' | 'projectId'>) => {
     if (id) {
-      addTask(id, { ...taskData, id: Date.now().toString(), projectId: id });
+      try {
+        await addTask(id, { ...taskData, id: Date.now().toString(), projectId: id });
+      } catch (error) {
+        console.error('Error adding task:', error);
+        alert('Error al agregar la tarea. Por favor, intenta de nuevo.');
+      }
     }
   }, [id, addTask]);
 
-  // Estados de carga y errores
   if (isLoadingInvite) {
     return (
       <div className="project-not-found">
@@ -283,7 +279,6 @@ export default function Project() {
     );
   }
 
-  // Verificación final: asegurar que project no sea undefined
   if (!project) {
     return (
       <div className="project-not-found">
@@ -329,18 +324,53 @@ export default function Project() {
               <CollaboratorsTab
                 collaborators={collaborators[id!] || []}
                 onAdd={handleAddCollaborator}
-                onUpdate={(collabId, updates) => updateCollaborator(id!, collabId, updates)}
-                onRemove={(collabId) => removeCollaborator(id!, collabId)}
+                onUpdate={async (collabId, updates) => {
+                  try {
+                    await updateCollaborator(id!, collabId, updates);
+                  } catch (error) {
+                    console.error('Error updating collaborator:', error);
+                    alert('Error al actualizar el colaborador. Por favor, intenta de nuevo.');
+                  }
+                }}
+                onRemove={async (collabId) => {
+                  try {
+                    await removeCollaborator(id!, collabId);
+                  } catch (error) {
+                    console.error('Error removing collaborator:', error);
+                    alert('Error al eliminar el colaborador. Por favor, intenta de nuevo.');
+                  }
+                }}
                 projectId={id}
-                onAddVisitor={addVisitor}
+                onAddVisitor={async (projectId, visitor) => {
+                  try {
+                    await addVisitor(projectId, visitor);
+                  } catch (error) {
+                    console.error('Error adding visitor:', error);
+                    alert('Error al agregar el visitante. Por favor, intenta de nuevo.');
+                  }
+                }}
               />
             )}
             {activeTab === 'budget' && (
               <BudgetTab 
                 budgetItems={budgets[id!] || []}
                 onAddItem={handleAddBudgetItem}
-                onUpdateItem={(itemId, updates) => updateBudgetItem(id!, itemId, updates)}
-                onRemoveItem={(itemId) => removeBudgetItem(id!, itemId)}
+                onUpdateItem={async (itemId, updates) => {
+                  try {
+                    await updateBudgetItem(id!, itemId, updates);
+                  } catch (error) {
+                    console.error('Error updating budget item:', error);
+                    alert('Error al actualizar el item de presupuesto. Por favor, intenta de nuevo.');
+                  }
+                }}
+                onRemoveItem={async (itemId) => {
+                  try {
+                    await removeBudgetItem(id!, itemId);
+                  } catch (error) {
+                    console.error('Error removing budget item:', error);
+                    alert('Error al eliminar el item de presupuesto. Por favor, intenta de nuevo.');
+                  }
+                }}
               />
             )}
             {activeTab === 'documentos' && (
@@ -356,8 +386,22 @@ export default function Project() {
                 collaborators={collaborators[id!] || []}
                 projectId={id!}
                 onAddTask={handleAddTask}
-                onUpdateTask={(taskId, updates) => updateTask(id!, taskId, updates)}
-                onRemoveTask={(taskId) => removeTask(id!, taskId)}
+                onUpdateTask={async (taskId, updates) => {
+                  try {
+                    await updateTask(id!, taskId, updates);
+                  } catch (error) {
+                    console.error('Error updating task:', error);
+                    alert('Error al actualizar la tarea. Por favor, intenta de nuevo.');
+                  }
+                }}
+                onRemoveTask={async (taskId) => {
+                  try {
+                    await removeTask(id!, taskId);
+                  } catch (error) {
+                    console.error('Error removing task:', error);
+                    alert('Error al eliminar la tarea. Por favor, intenta de nuevo.');
+                  }
+                }}
               />
             )}
           </>

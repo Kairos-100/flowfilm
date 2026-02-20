@@ -5,20 +5,16 @@ import './ProjectTabs.css';
 
 interface BudgetTabProps {
   budgetItems: BudgetItem[];
-  onAddItem: (item: Omit<BudgetItem, 'id'>) => void;
-  onUpdateItem: (itemId: string, updates: Partial<BudgetItem>) => void;
-  onRemoveItem: (itemId: string) => void;
+  onAddItem: (item: Omit<BudgetItem, 'id'>) => Promise<void> | void;
+  onUpdateItem: (itemId: string, updates: Partial<BudgetItem>) => Promise<void> | void;
+  onRemoveItem: (itemId: string) => Promise<void> | void;
 }
-
-// Removed unused statusIcons constant
 
 const statusColors = {
   aprobado: '#0f7b0f',
   pendiente: '#d97706',
   rechazado: '#dc2626',
 };
-
-// Removed unused statusLabels constant
 
 const budgetCategories = [
   'Pre-Production',
@@ -54,28 +50,33 @@ export default function BudgetTab({ budgetItems, onAddItem, onUpdateItem, onRemo
     .filter((item) => item.status === 'rechazado')
     .reduce((sum, item) => sum + item.amount, 0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingItem) {
-      onUpdateItem(editingItem.id, {
-        category: formData.category,
-        description: formData.description,
-        amount: parseFloat(formData.amount),
-        status: formData.status,
-      });
-      setEditingItem(null);
-    } else {
-      onAddItem({
-        category: formData.category,
-        description: formData.description,
-        amount: parseFloat(formData.amount),
-        status: formData.status,
-      });
-    }
+    try {
+      if (editingItem) {
+        await onUpdateItem(editingItem.id, {
+          category: formData.category,
+          description: formData.description,
+          amount: parseFloat(formData.amount),
+          status: formData.status,
+        });
+        setEditingItem(null);
+      } else {
+        await onAddItem({
+          category: formData.category,
+          description: formData.description,
+          amount: parseFloat(formData.amount),
+          status: formData.status,
+        });
+      }
 
-    setFormData({ category: '', description: '', amount: '', status: 'pendiente' });
-    setShowAddForm(false);
+      setFormData({ category: '', description: '', amount: '', status: 'pendiente' });
+      setShowAddForm(false);
+    } catch (error) {
+      console.error('Error saving budget item:', error);
+      alert('Error al guardar el item de presupuesto. Por favor, intenta de nuevo.');
+    }
   };
 
   const handleEdit = (item: BudgetItem) => {
@@ -95,8 +96,13 @@ export default function BudgetTab({ budgetItems, onAddItem, onUpdateItem, onRemo
     setFormData({ category: '', description: '', amount: '', status: 'pendiente' });
   };
 
-  const handleStatusChange = (itemId: string, newStatus: BudgetItem['status']) => {
-    onUpdateItem(itemId, { status: newStatus });
+  const handleStatusChange = async (itemId: string, newStatus: BudgetItem['status']) => {
+    try {
+      await onUpdateItem(itemId, { status: newStatus });
+    } catch (error) {
+      console.error('Error updating budget item status:', error);
+      alert('Error al actualizar el estado del item. Por favor, intenta de nuevo.');
+    }
   };
 
   return (
@@ -284,7 +290,16 @@ export default function BudgetTab({ budgetItems, onAddItem, onUpdateItem, onRemo
                         </button>
                         <button
                           className="icon-btn delete"
-                          onClick={() => onRemoveItem(item.id)}
+                          onClick={async () => {
+                            if (confirm('¿Estás seguro de que quieres eliminar este item de presupuesto?')) {
+                              try {
+                                await onRemoveItem(item.id);
+                              } catch (error) {
+                                console.error('Error removing budget item:', error);
+                                alert('Error al eliminar el item. Por favor, intenta de nuevo.');
+                              }
+                            }
+                          }}
                           title="Delete"
                         >
                           <Trash2 size={16} />

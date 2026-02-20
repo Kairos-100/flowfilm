@@ -28,11 +28,11 @@ const languageMap: Record<string, { name: string; flag: string }> = {
 
 interface CollaboratorsTabProps {
   collaborators: Collaborator[];
-  onAdd: (collaborator: Omit<Collaborator, 'id'>) => void;
-  onUpdate: (collaboratorId: string, updates: Partial<Collaborator>) => void;
-  onRemove: (collaboratorId: string) => void;
+  onAdd: (collaborator: Omit<Collaborator, 'id'>) => Promise<void> | void;
+  onUpdate: (collaboratorId: string, updates: Partial<Collaborator>) => Promise<void> | void;
+  onRemove: (collaboratorId: string) => Promise<void> | void;
   projectId?: string;
-  onAddVisitor?: (projectId: string, visitor: Visitor) => void;
+  onAddVisitor?: (projectId: string, visitor: Visitor) => Promise<void> | void;
 }
 
 const categoryLabels: Record<CollaboratorCategory, string> = {
@@ -87,9 +87,13 @@ export default function CollaboratorsTab({
     return collaborators.filter(c => c.isVisitor);
   }, [collaborators]);
 
-  const handleAdd = (collaborator: Omit<Collaborator, 'id'>) => {
-    onAdd(collaborator);
-    setIsModalOpen(false);
+  const handleAdd = async (collaborator: Omit<Collaborator, 'id'>) => {
+    try {
+      await onAdd(collaborator);
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Error adding collaborator:', error);
+    }
   };
 
   const handleEdit = (collaborator: Collaborator) => {
@@ -97,11 +101,15 @@ export default function CollaboratorsTab({
     setIsModalOpen(true);
   };
 
-  const handleUpdate = (collaborator: Omit<Collaborator, 'id'>) => {
+  const handleUpdate = async (collaborator: Omit<Collaborator, 'id'>) => {
     if (editingCollaborator) {
-      onUpdate(editingCollaborator.id, collaborator);
-      setEditingCollaborator(null);
-      setIsModalOpen(false);
+      try {
+        await onUpdate(editingCollaborator.id, collaborator);
+        setEditingCollaborator(null);
+        setIsModalOpen(false);
+      } catch (error) {
+        console.error('Error updating collaborator:', error);
+      }
     }
   };
 
@@ -222,7 +230,16 @@ export default function CollaboratorsTab({
                         </button>
                         <button
                           className="action-button danger"
-                          onClick={() => onRemove(collaborator.id)}
+                          onClick={async () => {
+                            if (confirm('¿Estás seguro de que quieres eliminar este colaborador?')) {
+                              try {
+                                await onRemove(collaborator.id);
+                              } catch (error) {
+                                console.error('Error removing collaborator:', error);
+                                alert('Error al eliminar el colaborador. Por favor, intenta de nuevo.');
+                              }
+                            }
+                          }}
                           title="Delete"
                         >
                           <Trash2 size={16} />
@@ -289,7 +306,16 @@ export default function CollaboratorsTab({
                   </button>
                   <button
                     className="action-button danger"
-                    onClick={() => onRemove(visitor.id)}
+                    onClick={async () => {
+                      if (confirm('¿Estás seguro de que quieres eliminar este visitante?')) {
+                        try {
+                          await onRemove(visitor.id);
+                        } catch (error) {
+                          console.error('Error removing visitor:', error);
+                          alert('Error al eliminar el visitante. Por favor, intenta de nuevo.');
+                        }
+                      }
+                    }}
                     title="Delete"
                   >
                     <Trash2 size={16} />
