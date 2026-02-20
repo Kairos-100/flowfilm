@@ -268,7 +268,8 @@ export function FestivalsProvider({ children }: { children: ReactNode }) {
   const updateFestivalsForNewYear = useCallback(async () => {
     if (!userId) return;
 
-    setFestivals(currentFestivals => {
+    try {
+      const currentFestivals = festivals;
       const currentYear = new Date().getFullYear();
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -276,7 +277,9 @@ export function FestivalsProvider({ children }: { children: ReactNode }) {
       const expiredFestivals = currentFestivals.filter(isFestivalExpired);
       const newFestivals: Festival[] = [];
       const festivalsToKeep: Festival[] = [];
+      const festivalsToDelete: string[] = [];
       
+      // Procesar festivales vencidos y crear nuevos para el próximo año
       for (const expired of expiredFestivals) {
         const templateId = getTemplateIdFromFestivalId(expired.id);
         if (templateId) {
@@ -287,97 +290,122 @@ export function FestivalsProvider({ children }: { children: ReactNode }) {
             
             if (!currentFestivals.some(f => f.id === newFestival.id)) {
               newFestivals.push(newFestival);
-              // Guardar en Supabase
-              supabase.from('festivals').insert({
-                id: newFestival.id,
-                user_id: userId,
-                name: newFestival.name,
-                region: newFestival.region,
-                year: newFestival.year,
-                film_submission_deadline: newFestival.filmSubmissionDeadline.toISOString().split('T')[0],
-                producers_hub_deadline: newFestival.producersHubDeadline.toISOString().split('T')[0],
-                festival_start_date: newFestival.festivalStartDate.toISOString().split('T')[0],
-                festival_end_date: newFestival.festivalEndDate.toISOString().split('T')[0],
-                number_of_days: newFestival.numberOfDays,
-                contacts: newFestival.contacts || [],
-                website: newFestival.website || null,
-                location: newFestival.location || null,
-              }).catch(err => console.error('Error adding new festival:', err));
             }
           }
         }
+        festivalsToDelete.push(expired.id);
       }
       
+      // Separar festivales a mantener
       for (const festival of currentFestivals) {
         if (!isFestivalExpired(festival) || festival.year >= currentYear) {
           festivalsToKeep.push(festival);
         } else {
-          // Eliminar festival vencido de Supabase
-          supabase.from('festivals')
-            .delete()
-            .eq('id', festival.id)
-            .eq('user_id', userId)
-            .catch(err => console.error('Error removing expired festival:', err));
+          festivalsToDelete.push(festival.id);
+        }
+      }
+      
+      // Eliminar festivales vencidos de Supabase
+      if (festivalsToDelete.length > 0) {
+        const { error } = await supabase.from('festivals')
+          .delete()
+          .eq('user_id', userId)
+          .in('id', festivalsToDelete);
+        if (error) {
+          console.error('Error removing expired festivals:', error);
+        }
+      }
+      
+      // Insertar nuevos festivales en Supabase
+      if (newFestivals.length > 0) {
+        const festivalsToInsert = newFestivals.map(f => ({
+          id: f.id,
+          user_id: userId,
+          name: f.name,
+          region: f.region,
+          year: f.year,
+          film_submission_deadline: f.filmSubmissionDeadline.toISOString().split('T')[0],
+          producers_hub_deadline: f.producersHubDeadline.toISOString().split('T')[0],
+          festival_start_date: f.festivalStartDate.toISOString().split('T')[0],
+          festival_end_date: f.festivalEndDate.toISOString().split('T')[0],
+          number_of_days: f.numberOfDays,
+          contacts: f.contacts || [],
+          website: f.website || null,
+          location: f.location || null,
+        }));
+        
+        const { error } = await supabase.from('festivals').insert(festivalsToInsert);
+        if (error) {
+          console.error('Error adding new festivals:', error);
         }
       }
       
       const updatedFestivals = [...festivalsToKeep, ...newFestivals];
-      
       const existingYears = new Set(updatedFestivals.map(f => f.year));
       
+      // Agregar festivales del año actual si no existen
       if (!existingYears.has(currentYear)) {
         const currentYearFestivals = festivalTemplates.map(template => 
           createFestivalFromTemplate(template, currentYear)
         );
         updatedFestivals.push(...currentYearFestivals);
-        // Guardar en Supabase
-        currentYearFestivals.forEach(f => {
-          supabase.from('festivals').insert({
-            id: f.id,
-            user_id: userId,
-            name: f.name,
-            region: f.region,
-            year: f.year,
-            film_submission_deadline: f.filmSubmissionDeadline.toISOString().split('T')[0],
-            producers_hub_deadline: f.producersHubDeadline.toISOString().split('T')[0],
-            festival_start_date: f.festivalStartDate.toISOString().split('T')[0],
-            festival_end_date: f.festivalEndDate.toISOString().split('T')[0],
-            number_of_days: f.numberOfDays,
-            contacts: f.contacts || [],
-            website: f.website || null,
-            location: f.location || null,
-          }).catch(err => console.error('Error adding current year festival:', err));
-        });
+        
+        const festivalsToInsert = currentYearFestivals.map(f => ({
+          id: f.id,
+          user_id: userId,
+          name: f.name,
+          region: f.region,
+          year: f.year,
+          film_submission_deadline: f.filmSubmissionDeadline.toISOString().split('T')[0],
+          producers_hub_deadline: f.producersHubDeadline.toISOString().split('T')[0],
+          festival_start_date: f.festivalStartDate.toISOString().split('T')[0],
+          festival_end_date: f.festivalEndDate.toISOString().split('T')[0],
+          number_of_days: f.numberOfDays,
+          contacts: f.contacts || [],
+          website: f.website || null,
+          location: f.location || null,
+        }));
+        
+        const { error } = await supabase.from('festivals').insert(festivalsToInsert);
+        if (error) {
+          console.error('Error adding current year festivals:', error);
+        }
       }
       
+      // Agregar festivales del próximo año si no existen
       if (!existingYears.has(currentYear + 1)) {
         const nextYearFestivals = festivalTemplates.map(template => 
           createFestivalFromTemplate(template, currentYear + 1)
         );
         updatedFestivals.push(...nextYearFestivals);
-        // Guardar en Supabase
-        nextYearFestivals.forEach(f => {
-          supabase.from('festivals').insert({
-            id: f.id,
-            user_id: userId,
-            name: f.name,
-            region: f.region,
-            year: f.year,
-            film_submission_deadline: f.filmSubmissionDeadline.toISOString().split('T')[0],
-            producers_hub_deadline: f.producersHubDeadline.toISOString().split('T')[0],
-            festival_start_date: f.festivalStartDate.toISOString().split('T')[0],
-            festival_end_date: f.festivalEndDate.toISOString().split('T')[0],
-            number_of_days: f.numberOfDays,
-            contacts: f.contacts || [],
-            website: f.website || null,
-            location: f.location || null,
-          }).catch(err => console.error('Error adding next year festival:', err));
-        });
+        
+        const festivalsToInsert = nextYearFestivals.map(f => ({
+          id: f.id,
+          user_id: userId,
+          name: f.name,
+          region: f.region,
+          year: f.year,
+          film_submission_deadline: f.filmSubmissionDeadline.toISOString().split('T')[0],
+          producers_hub_deadline: f.producersHubDeadline.toISOString().split('T')[0],
+          festival_start_date: f.festivalStartDate.toISOString().split('T')[0],
+          festival_end_date: f.festivalEndDate.toISOString().split('T')[0],
+          number_of_days: f.numberOfDays,
+          contacts: f.contacts || [],
+          website: f.website || null,
+          location: f.location || null,
+        }));
+        
+        const { error } = await supabase.from('festivals').insert(festivalsToInsert);
+        if (error) {
+          console.error('Error adding next year festivals:', error);
+        }
       }
       
-      return updatedFestivals;
-    });
-  }, [userId]);
+      setFestivals(updatedFestivals);
+    } catch (error) {
+      console.error('Error updating festivals for new year:', error);
+    }
+  }, [userId, festivals]);
 
   // Verificar y actualizar festivales al inicio del año
   useEffect(() => {
